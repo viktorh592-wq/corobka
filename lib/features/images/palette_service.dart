@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:flutter/painting.dart';
 import 'package:palette_generator/palette_generator.dart';
 
 /// Сервис извлечения цветовой палитры из изображения.
@@ -35,8 +34,7 @@ class PaletteService {
       final colors = <String>[];
       final addColor = (ui.Color? c) {
         if (c == null) return;
-        final hex =
-            '${c.toARGB32() & 0xFFFFFF}'.padLeft(6, '0').toUpperCase();
+        final hex = _toHex(c);
         if (!colors.contains(hex)) colors.add(hex);
       };
 
@@ -51,9 +49,11 @@ class PaletteService {
       return null;
     }
   }
-}
 
-/// Расширение для чтения ARGB-значения цвета (совместимость с Flutter 3.x).
-extension on ui.Color {
-  int toARGB32() => (a << 24) | (r << 16) | (g << 8) | b;
+  /// Преобразование цвета в шестнадцатеричную строку `RRGGBB`.
+  String _toHex(ui.Color c) {
+    final argb = c.toARGB32();
+    final rgb = argb & 0xFFFFFF;
+    return rgb.toRadixString(16).padLeft(6, '0').toUpperCase();
+  }
 }
