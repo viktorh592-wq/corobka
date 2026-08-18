@@ -66,7 +66,7 @@ void main() {
   test('Перемещение элемента в корень', () async {
     final folderId = await service.createFolder('Временная');
 
-    final itemId = await const ItemDao().insert(const CollectionItem(
+    final itemId = await const ItemDao().insert(CollectionItem(
       id: 0,
       title: 'Экран',
       path: '/tmp/screen.png',
