@@ -87,16 +87,41 @@ class CollectionState extends ChangeNotifier {
 
   /// Инициализация коллекции: настройка корневого каталога и загрузка данных.
   Future<void> initialize() async {
-    final savedRoot = await _settings.loadRootPath();
-    await _service.initializeRoot(customPath: savedRoot);
+    try {
+      String? savedRoot;
+      try {
+        savedRoot = await _settings.loadRootPath();
+      } catch (e) {
+        debugPrint('loadRootPath error: $e');
+      }
 
-    final savedView = await _settings.loadViewMode();
-    if (savedView != null) {
-      final parsed = ViewMode.values.asNameMap()[savedView];
-      if (parsed != null) _viewMode = parsed;
+      try {
+        await _service.initializeRoot(customPath: savedRoot);
+      } catch (e) {
+        debugPrint('initializeRoot error: $e');
+        // Даже при ошибке пробуем дефолтный путь, чтобы не было null.
+        try {
+          await _service.initializeRoot(customPath: null);
+        } catch (_) {}
+      }
+
+      String? savedView;
+      try {
+        savedView = await _settings.loadViewMode();
+        if (savedView != null) {
+          final parsed = ViewMode.values.asNameMap()[savedView];
+          if (parsed != null) _viewMode = parsed;
+        }
+      } catch (e) {
+        debugPrint('loadViewMode error: $e');
+      }
+
+      await _load();
+    } catch (e, stack) {
+      debugPrint('initialize error: $e\n$stack');
+      _isLoading = false;
+      notifyListeners();
     }
-
-    await _load();
   }
 
   /// Загрузка папок, элементов и тегов из базы данных.
