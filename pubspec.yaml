@@ -31,6 +31,9 @@ dependencies:
   # Drag-and-drop файлов в окно
   desktop_drop: ^0.4.4
 
+  # Типы для drag-and-drop (XFile) и обмена файлами
+  cross_file: ^0.3.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
