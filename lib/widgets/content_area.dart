@@ -1,3 +1,46 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../data/models/item.dart';
+import '../features/collection/collection_state.dart';
+import 'drop_zone.dart';
+import 'lightbox_viewer.dart';
+
+/// Центральная область контента.
+///
+/// Содержит панель инструментов (поиск, импорт, экспорт, фильтры) и область
+/// просмотра элементов коллекции. Поддерживает drag-and-drop импорт,
+/// выбор элемента и открытие полноэкранного просмотра (lightbox).
+class ContentArea extends StatelessWidget {
+  const ContentArea({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<CollectionState>();
+
+    return DropZone(
+      controller: state.importController,
+      onImported: state.refreshItems,
+      child: Column(
+        children: [
+          const _Toolbar(),
+          const Divider(height: 1),
+          Expanded(child: _ItemGrid()),
+        ],
+      ),
+    );
+  }
+}
+
+/// Панель инструментов.
+class _Toolbar extends StatefulWidget {
+  const _Toolbar();
+
+  @override
+  State<_Toolbar> createState() => _ToolbarState();
+}
+
 class _ToolbarState extends State<_Toolbar> {
   late final TextEditingController _searchController;
   Timer? _debounce;
@@ -148,6 +191,122 @@ class _ToolbarState extends State<_Toolbar> {
               onPressed: () => widget.state.setViewMode(ViewMode.list),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Сетка элементов коллекции.
+class _ItemGrid extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<CollectionState>();
+
+    if (state.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (state.items.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.photo_library_outlined,
+              size: 64,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Перетащите изображения сюда или нажмите «Импорт»',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(12),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 200,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        childAspectRatio: 1,
+      ),
+      itemCount: state.items.length,
+      itemBuilder: (context, index) {
+        final item = state.items[index];
+        return _ItemCard(item: item, index: index);
+      },
+    );
+  }
+}
+
+/// Карточка элемента коллекции.
+class _ItemCard extends StatelessWidget {
+  const _ItemCard({required this.item, required this.index});
+
+  final CollectionItem item;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<CollectionState>();
+
+    return GestureDetector(
+      onTap: () => state.selectItem(item),
+      onDoubleTap: () => _openLightbox(context, state),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: state.selectedItem?.id == item.id
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.outlineVariant,
+            width: state.selectedItem?.id == item.id ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(8),
+                ),
+                child: Image.file(
+                  File(item.path),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    child: const Icon(Icons.broken_image_outlined),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(4),
+              child: Text(
+                item.title ?? '',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openLightbox(BuildContext context, CollectionState state) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LightboxViewer(
+          items: state.items,
+          initialIndex: index,
         ),
       ),
     );
