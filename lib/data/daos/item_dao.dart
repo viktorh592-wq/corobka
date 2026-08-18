@@ -85,6 +85,10 @@ class ItemDao {
   }
 
   /// Поиск элементов по фильтру.
+  ///
+  /// SQL применяется для фильтров по папке, избранному, формату, дате,
+  /// цвету и тегам. Полнотекстовый поиск по названию/заметкам выполняется
+  /// на стороне Dart (регистронезависимо для кириллицы).
   Future<List<CollectionItem>> search(ItemFilter filter) async {
     final db = await _db;
 
@@ -98,14 +102,6 @@ class ItemDao {
 
     if (filter.favoritesOnly) {
       where.add('is_favorite = 1');
-    }
-
-    // Полнотекстовый поиск (регистронезависимый для кириллицы через lower()).
-    if (filter.query != null && filter.query!.trim().isNotEmpty) {
-      final like = '%${filter.query!.trim().toLowerCase()}%';
-      where.add('(lower(title) LIKE ? OR lower(notes) LIKE ?)');
-      args.add(like);
-      args.add(like);
     }
 
     if (filter.format != null) {
@@ -130,6 +126,7 @@ class ItemDao {
     }
 
     if (filter.tagIds != null && filter.tagIds!.isNotEmpty) {
+      // Фильтр по тегам (AND): элемент должен иметь все указанные теги.
       final placeholders = List.filled(filter.tagIds!.length, '?').join(', ');
       where.add(
         'id IN ('
@@ -147,7 +144,20 @@ class ItemDao {
     final sql = 'SELECT * FROM items $whereClause ORDER BY created_at DESC';
 
     final rows = await db.rawQuery(sql, args);
-    return rows.map(CollectionItem.fromMap).toList();
+    var items = rows.map(CollectionItem.fromMap).toList();
+
+    // Полнотекстовый поиск — надёжно на стороне Dart.
+    // Регистронезависимо для кириллицы через toLowerCase().
+    if (filter.query != null && filter.query!.trim().isNotEmpty) {
+      final q = filter.query!.trim().toLowerCase();
+      items = items.where((e) {
+        final title = (e.title ?? '').toLowerCase();
+        final notes = (e.notes ?? '').toLowerCase();
+        return title.contains(q) || notes.contains(q);
+      }).toList();
+    }
+
+    return items;
   }
 }
 
