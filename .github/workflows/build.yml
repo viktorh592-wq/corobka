@@ -15,6 +15,9 @@ jobs:
         with:
           channel: stable
 
+      - name: Generate Windows project
+        run: flutter create --platforms=windows --org com.example .
+
       - name: Install dependencies
         run: flutter pub get
 
