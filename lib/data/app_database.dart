@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -39,8 +41,16 @@ class AppDatabase {
 
   /// Определение стандартного пути к файлу БД.
   static Future<String> _defaultDbPath() async {
-    final dir = await getApplicationSupportDirectory();
-    return p.join(dir.path, _dbName);
+    try {
+      final dir = await getApplicationSupportDirectory();
+      if (dir.path.isNotEmpty) return p.join(dir.path, _dbName);
+    } catch (e) {
+      // path_provider недоступен — используем запасной путь.
+    }
+    final home =
+        Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
+    final base = home != null && home.isNotEmpty ? home : Directory.current.path;
+    return p.join(base, _dbName);
   }
 
   /// Создание схемы базы данных при первом запуске.
