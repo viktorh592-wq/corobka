@@ -1,4 +1,3 @@
-import 'package:cross_file/cross_file.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 
@@ -30,8 +29,8 @@ class DropZone extends StatelessWidget {
     );
   }
 
-  Future<void> _handleDragDone(List<XFile> files) async {
-    final paths = files.map((f) => f.path).toList();
+  Future<void> _handleDragDone(List<DropItem> files) async {
+    final paths = files.map((f) => f.path).whereType<String>().toList();
     await controller.importPaths(paths);
     onImported?.call();
   }
