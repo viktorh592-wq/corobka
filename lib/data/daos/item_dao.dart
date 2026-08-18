@@ -85,9 +85,6 @@ class ItemDao {
   }
 
   /// Поиск элементов по фильтру.
-  ///
-  /// Поддерживает полнотекстовый поиск по названию и заметкам, фильтр по
-  /// папке, избранному, тегам, формату, диапазону дат и цвету палитры.
   Future<List<CollectionItem>> search(ItemFilter filter) async {
     final db = await _db;
 
@@ -133,7 +130,6 @@ class ItemDao {
     }
 
     if (filter.tagIds != null && filter.tagIds!.isNotEmpty) {
-      // Фильтр по тегам (AND): элемент должен иметь все указанные теги.
       final placeholders = List.filled(filter.tagIds!.length, '?').join(', ');
       where.add(
         'id IN ('
@@ -156,9 +152,6 @@ class ItemDao {
 }
 
 /// Фильтр для поиска элементов коллекции.
-///
-/// Передаётся в [ItemDao.search] для полнотекстового поиска и фильтрации
-/// по папке, избранному, тегам, формату, дате и цвету палитры.
 class ItemFilter {
   const ItemFilter({
     this.query,
@@ -171,27 +164,12 @@ class ItemFilter {
     this.paletteColor,
   });
 
-  /// Поисковый запрос (поиск по названию и заметкам).
   final String? query;
-
-  /// Идентификатор папки для фильтрации.
   final int? folderId;
-
-  /// Показывать только избранные элементы.
   final bool favoritesOnly;
-
-  /// Список идентификаторов тегов (элемент должен иметь все).
   final List<int>? tagIds;
-
-  /// Фильтр по формату файла.
   final String? format;
-
-  /// Элементы добавленные не позже указанного времени (unix-секунды).
   final int? createdBefore;
-
-  /// Элементы добавленные не раньше указанного времени (unix-секунды).
   final int? createdAfter;
-
-  /// Фильтр по цвету палитры (шестнадцатеричное значение без '#').
   final String? paletteColor;
 }
