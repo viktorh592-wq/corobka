@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../data/models/item.dart';
 import '../features/collection/collection_state.dart';
@@ -24,7 +26,7 @@ class ContentArea extends StatelessWidget {
       onImported: state.refreshItems,
       child: Column(
         children: [
-          const _Toolbar(),
+          _Toolbar(state: state),
           const Divider(height: 1),
           Expanded(child: _ItemGrid()),
         ],
@@ -35,7 +37,9 @@ class ContentArea extends StatelessWidget {
 
 /// Панель инструментов.
 class _Toolbar extends StatefulWidget {
-  const _Toolbar();
+  const _Toolbar({required this.state});
+
+  final CollectionState state;
 
   @override
   State<_Toolbar> createState() => _ToolbarState();
