@@ -103,9 +103,10 @@ class ItemDao {
       where.add('is_favorite = 1');
     }
 
+    // Полнотекстовый поиск (регистронезависимый для кириллицы через lower()).
     if (filter.query != null && filter.query!.trim().isNotEmpty) {
-      final like = '%${filter.query!.trim()}%';
-      where.add('(title LIKE ? OR notes LIKE ?)');
+      final like = '%${filter.query!.trim().toLowerCase()}%';
+      where.add('(lower(title) LIKE ? OR lower(notes) LIKE ?)');
       args.add(like);
       args.add(like);
     }
