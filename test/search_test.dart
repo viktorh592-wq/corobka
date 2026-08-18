@@ -13,13 +13,16 @@ void main() {
 
   late ItemDao itemDao;
   late SearchService searchService;
+  late String dbPath;
 
   setUp(() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
-    AppDatabase.overridePath =
-        '${Directory.systemTemp.path}/korobka_search_test.db';
-    await AppDatabase.close();
+
+    // Уникальный путь для каждого теста, чтобы БД всегда была чистой.
+    dbPath = '${Directory.systemTemp.path}/korobka_search_'
+        '${DateTime.now().microsecondsSinceEpoch}.db';
+    AppDatabase.overridePath = dbPath;
 
     itemDao = const ItemDao();
     searchService = const SearchService();
@@ -27,6 +30,10 @@ void main() {
 
   tearDown(() async {
     await AppDatabase.close();
+    final file = File(dbPath);
+    if (await file.exists()) {
+      await file.delete();
+    }
   });
 
   Future<void> _insert(
