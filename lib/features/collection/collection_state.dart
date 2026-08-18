@@ -21,11 +21,14 @@ class CollectionState extends ChangeNotifier {
     CollectionService? service,
     SettingsRepository? settings,
   })  : _service = service ?? CollectionService(),
-        _settings = settings ?? SettingsRepository();
+        _settings = settings ?? SettingsRepository(),
+        _importController =
+            ImportController(collection: service ?? CollectionService());
 
   final CollectionService _service;
   final SettingsRepository _settings;
   final SmartFolderService _smartFolders = const SmartFolderService();
+  final ImportController _importController;
 
   String _selectedFolderId = 'all';
   ViewMode _viewMode = ViewMode.grid;
@@ -44,6 +47,9 @@ class CollectionState extends ChangeNotifier {
 
   /// Доступ к сервису коллекции (для drag-and-drop контроллера).
   CollectionService get collectionService => _service;
+
+  /// Контроллер импорта (drag-and-drop, выбор файлов/папки).
+  ImportController get importController => _importController;
 
   /// Идентификатор выбранной папки (по умолчанию — «Все»).
   String get selectedFolderId => _selectedFolderId;
@@ -286,6 +292,23 @@ class CollectionState extends ChangeNotifier {
   /// Получение элементов, попадающих в умную папку.
   Future<List<CollectionItem>> getSmartFolderItems(SmartFolder folder) =>
       _smartFolders.getItemsFor(folder);
+
+  // ─────────────────────────── ИМПОРТ ───────────────────────────
+
+  /// Открытие диалога выбора файлов и их импорт.
+  Future<void> importFiles() async {
+    await _importController.importFiles(folderId: _currentFolderId);
+    await _loadItemsAndNotify();
+  }
+
+  /// Выбор папки и импорт всех изображений внутри неё.
+  Future<void> importDirectory() async {
+    await _importController.importDirectory(folderId: _currentFolderId);
+    await _loadItemsAndNotify();
+  }
+
+  /// Идентификатор выбранной папки (числовой) или `null` для системных разделов.
+  int? get _currentFolderId => int.tryParse(_selectedFolderId);
 
   // ─────────────────────────── ЭКСПОРТ ───────────────────────────
 
