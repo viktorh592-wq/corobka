@@ -26,7 +26,7 @@ void main() {
   });
 
   setUp(() async {
-    await AppDatabaseTest.setDatabasePath(testDbPath);
+    AppDatabaseTest.setDatabasePath(testDbPath);
   });
 
   tearDown(() async {
