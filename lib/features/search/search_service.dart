@@ -28,8 +28,10 @@ class SearchService {
         favoritesOnly: favoritesOnly,
         tagIds: tagIds,
         format: format,
-        createdBefore: before?.millisecondsSinceEpoch ~/ 1000,
-        createdAfter: after?.millisecondsSinceEpoch ~/ 1000,
+        createdBefore:
+            before == null ? null : before.millisecondsSinceEpoch ~/ 1000,
+        createdAfter:
+            after == null ? null : after.millisecondsSinceEpoch ~/ 1000,
         paletteColor: paletteColor,
       ),
     );
