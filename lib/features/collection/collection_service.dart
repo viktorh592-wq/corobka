@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../data/daos/folder_dao.dart';
@@ -14,10 +15,6 @@ import '../images/palette_service.dart';
 import '../search/search_service.dart';
 
 /// Высокоуровневый сервис работы с коллекцией.
-///
-/// Объединяет операции над папками, элементами, тегами, избранным,
-/// а также импорт файлов и поиск. Является точкой доступа к данным
-/// для состояния коллекции [CollectionState].
 class CollectionService {
   CollectionService({
     FolderDao? folderDao,
@@ -43,15 +40,13 @@ class CollectionService {
   final MetadataService _metadataService;
   final PaletteService _paletteService;
 
-  /// Корневой каталог коллекции, в который копируются файлы.
+  /// Корневой каталог коллекции.
   String? _rootPath;
 
   /// Инициализация корневого каталога коллекции.
-  ///
-  /// Если [customPath] не задан, используется каталог поддержки приложения.
   Future<void> initializeRoot({String? customPath}) async {
     if (customPath != null && customPath.trim().isNotEmpty) {
-      _rootPath = customPath;
+      _rootPath = customPath.trim();
     } else {
       _rootPath = await _defaultRootPath();
     }
@@ -62,20 +57,37 @@ class CollectionService {
   }
 
   /// Путь к каталогу хранения файлов коллекции.
-  String get imagesPath =>
-      '$_rootPath${Platform.pathSeparator}images';
-
-  Future<String> _defaultRootPath() async {
-    final dir = await getApplicationSupportDirectory();
-    return dir.path;
+  String get imagesPath {
+    final root = _rootPath ?? Directory.current.path;
+    return '$root${Platform.pathSeparator}images';
   }
 
-  // ─────────────────────────── ПАПКИ ───────────────────────────
+  Future<String> _defaultRootPath() async {
+    // Пытаемся использовать каталог поддержки приложения.
+    try {
+      final dir = await getApplicationSupportDirectory();
+      if (dir.path.isNotEmpty) return dir.path;
+    } catch (e) {
+      debugPrint('getApplicationSupportDirectory error: $e');
+    }
+    // Запасной вариант — домашний каталог пользователя.
+    final home =
+        Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
+    if (home != null && home.isNotEmpty) {
+      final dir = Directory('$home${Platform.pathSeparator}korobka');
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      return dir.path;
+    }
+    // Последний запасной вариант — текущий каталог.
+    return Directory.current.path;
+  }
 
-  /// Получение всех папок коллекции.
+  // ─────────── ПАПКИ ───────────
+
   Future<List<Folder>> getFolders() => _folderDao.getAll();
 
-  /// Создание новой папки.
   Future<int> createFolder(String name) => _folderDao.insert(
         Folder(
           id: 0,
@@ -84,28 +96,20 @@ class CollectionService {
         ),
       );
 
-  /// Переименование папки.
   Future<int> renameFolder(int id, String newName) =>
       _folderDao.rename(id, newName);
 
-  /// Удаление папки.
   Future<int> deleteFolder(int id) => _folderDao.delete(id);
 
-  // ─────────────────────────── ЭЛЕМЕНТЫ ───────────────────────────
+  // ─────────── ЭЛЕМЕНТЫ ───────────
 
-  /// Получение всех элементов (опционально — в указанной папке).
   Future<List<CollectionItem>> getItems({int? folderId}) =>
       _itemDao.getAll(folderId: folderId);
 
-  /// Получение избранных элементов.
   Future<List<CollectionItem>> getFavorites() => _search.search(
         favoritesOnly: true,
       );
 
-  /// Добавление изображения в коллекцию.
-  ///
-  /// Копирует файл в хранилище коллекции, извлекает метаданные и палитру,
-  /// после чего сохраняет запись в базе данных.
   Future<CollectionItem> addItem({
     required String sourcePath,
     int? folderId,
@@ -137,7 +141,6 @@ class CollectionService {
     return _copyWithId(item, id);
   }
 
-  /// Обновление названия и заметок элемента.
   Future<int> updateItemAnnotations(
     int id, {
     String? title,
@@ -145,39 +148,29 @@ class CollectionService {
   }) =>
       _itemDao.updateAnnotations(id, title: title, notes: notes);
 
-  /// Установка флага «избранное».
   Future<int> setFavorite(int id, bool isFavorite) =>
       _itemDao.setFavorite(id, isFavorite);
 
-  /// Перемещение элемента в другую папку (null — в корень).
   Future<int> moveItemToFolder(int id, int? folderId) =>
       _itemDao.moveToFolder(id, folderId);
 
-  // ─────────────────────────── ТЕГИ ───────────────────────────
+  // ─────────── ТЕГИ ───────────
 
-  /// Получение всех тегов коллекции.
   Future<List<Tag>> getTags() => _tagDao.getAll();
 
-  /// Получение тегов конкретного элемента.
   Future<List<Tag>> getTagsForItem(int itemId) =>
       _tagDao.getTagsForItem(itemId);
 
-  /// Добавление тега к элементу (тег создаётся при необходимости).
   Future<void> addTagToItem(int itemId, String tagName) async {
     final tagId = await _tagDao.ensureTag(tagName);
     await _tagDao.attachTagToItem(itemId, tagId);
   }
 
-  /// Удаление тега с элемента.
   Future<void> removeTagFromItem(int itemId, int tagId) =>
       _tagDao.detachTagFromItem(itemId, tagId);
 
-  // ─────────────────────────── ПОИСК ───────────────────────────
+  // ─────────── ПОИСК ───────────
 
-  /// Поиск элементов по запросу и фильтрам.
-  ///
-  /// Позволяет искать по названию/заметкам и фильтровать по папке,
-  /// избранному, тегам, формату, дате и цвету палитры.
   Future<List<CollectionItem>> searchItems({
     String? query,
     int? folderId,
@@ -204,7 +197,7 @@ class CollectionService {
     );
   }
 
-  // ─────────────────────────── ВСПОМОГАТЕЛЬНОЕ ───────────────────────────
+  // ─────────── ВСПОМОГАТЕЛЬНОЕ ───────────
 
   CollectionItem _copyWithId(CollectionItem item, int id) {
     return CollectionItem(
