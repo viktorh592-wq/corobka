@@ -118,18 +118,32 @@ class _Preview extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget content;
     if (item.isVideo) {
-      content = Container(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.movie_outlined, size: 48),
-            const SizedBox(height: 8),
-            Text('Видео · ${item.format?.toUpperCase() ?? ''}',
-                style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
-      );
+      // Показываем извлечённый превью-кадр, если он уже есть.
+      final state = context.read<CollectionState>();
+      final thumbPath = state.videoThumbnailPath(item.path);
+      content = thumbPath != null
+          ? Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.file(
+                  File(thumbPath),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      _videoPlaceholder(context, item),
+                ),
+                Center(
+                  child: Icon(
+                    Icons.play_circle_outline,
+                    size: 44,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    shadows: const [
+                      Shadow(blurRadius: 10, color: Colors.black54),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : _videoPlaceholder(context, item);
     } else if (item.isAudio) {
       content = Container(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -159,6 +173,22 @@ class _Preview extends StatelessWidget {
       child: AspectRatio(aspectRatio: 16 / 10, child: content),
     );
   }
+}
+
+/// Плейсхолдер видео без готового превью-кадра.
+Widget _videoPlaceholder(BuildContext context, CollectionItem item) {
+  return Container(
+    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.movie_outlined, size: 48),
+        const SizedBox(height: 8),
+        Text('Видео · ${item.format?.toUpperCase() ?? ''}',
+            style: Theme.of(context).textTheme.bodySmall),
+      ],
+    ),
+  );
 }
 
 /// Редактирование названия.

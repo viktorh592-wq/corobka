@@ -10,11 +10,16 @@ import 'image_service.dart';
 class ImportController extends ChangeNotifier {
   ImportController({
     required this.collection,
+    this.onVideoImported,
     ImageService? imageService,
   }) : _imageService = imageService ?? const ImageService();
 
   final CollectionService collection;
   final ImageService _imageService;
+
+  /// Опциональный колбэк после импорта видеофайла — используется для
+  /// извлечения превью-кадра (см. VideoThumbnailService).
+  final Future<void> Function(String videoPath)? onVideoImported;
 
   /// Идёт ли процесс импорта в данный момент.
   bool _isImporting = false;
@@ -56,9 +61,20 @@ class ImportController extends ChangeNotifier {
 
     try {
       for (final path in paths) {
-        await collection.addItem(sourcePath: path, folderId: folderId);
+        final item = await collection.addItem(
+          sourcePath: path,
+          folderId: folderId,
+        );
         _importedCount++;
         notifyListeners();
+        // Для видео сразу извлекаем превью-кадр (ошибки не роняют импорт).
+        if (item.isVideo && onVideoImported != null) {
+          try {
+            await onVideoImported!(item.path);
+          } catch (e) {
+            debugPrint('video thumbnail after import failed: $e');
+          }
+        }
       }
     } finally {
       _isImporting = false;

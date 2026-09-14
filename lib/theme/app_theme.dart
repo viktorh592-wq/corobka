@@ -42,6 +42,21 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: contentBackground,
+      // Верхняя панель окрашена так же, как боковые панели — единая
+      // «оболочка» приложения вокруг области контента (как в Eagle).
+      appBarTheme: AppBarTheme(
+        backgroundColor: panelColor,
+        foregroundColor: scheme.onSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        // Без M3-оттенка при прокрутке — цвет панели не «плывёт».
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: TextStyle(
+          color: scheme.onSurface,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       extensions: [
         PanelColors(
           panel: panelColor,

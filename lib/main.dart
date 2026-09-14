@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 
 import 'features/collection/collection_state.dart';
@@ -10,6 +11,16 @@ void main() {
   // Гарантируем инициализацию биндингов до обращения к плагинам
   // (shared_preferences, path_provider) из асинхронного кода.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Инициализация media_kit (libmpv) — нужна для превью-кадров видео.
+  // Если нативные библиотеки недоступны (тесты, экзотические системы) —
+  // работаем дальше без превью видео, приложение не должно падать.
+  try {
+    MediaKit.ensureInitialized();
+  } catch (e) {
+    debugPrint('MediaKit init skipped: $e');
+  }
+
   runApp(const KorobkaApp());
 }
 

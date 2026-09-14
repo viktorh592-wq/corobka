@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import '../../data/models/folder.dart';
@@ -6,6 +9,7 @@ import '../../data/models/tag.dart';
 import '../../data/settings_repository.dart';
 import '../images/export_service.dart';
 import '../images/import_controller.dart';
+import '../images/video_thumbnail_service.dart';
 import 'collection_service.dart';
 
 /// Режимы просмотра коллекции.
@@ -38,7 +42,10 @@ class CollectionState extends ChangeNotifier {
     // ВАЖНО: импортёр обязан использовать ТОТ ЖЕ экземпляр сервиса, что и
     // состояние, иначе у него не инициализирован корневой каталог коллекции
     // и файлы копировались бы в случайный каталог (Directory.current/images).
-    _importController = ImportController(collection: _service);
+    _importController = ImportController(
+      collection: _service,
+      onVideoImported: _ensureVideoThumbnail,
+    );
     _importController.addListener(_onImportProgress);
   }
 
@@ -66,6 +73,20 @@ class CollectionState extends ChangeNotifier {
 
   CollectionItem? _selectedItem;
   List<Tag> _selectedItemTags = const [];
+
+  /// Пути исходных видеофайлов, для которых есть превью-кадр.
+  /// Синхронный Set — карточки не делают дисковых проверок при сборке.
+  final Set<String> _videoThumbnails = <String>{};
+
+  /// Есть ли превью-кадр у видеофайла с путём [sourcePath].
+  bool hasVideoThumbnail(String sourcePath) =>
+      _videoThumbnails.contains(sourcePath);
+
+  /// Путь к файлу превью для видеофайла или `null`, если превью нет.
+  String? videoThumbnailPath(String sourcePath) =>
+      _videoThumbnails.contains(sourcePath)
+          ? _service.thumbnailPathFor(sourcePath)
+          : null;
 
   bool _isLoading = true;
   bool get isLoading => _isLoading;
@@ -197,6 +218,9 @@ class CollectionState extends ChangeNotifier {
       }
 
       await _load();
+
+      // Превью видео достраиваем в фоне — UI не ждёт декодирования.
+      unawaited(_backfillVideoThumbnails());
     } catch (e, stack) {
       debugPrint('initialize error: $e\n$stack');
       _lastError = 'Ошибка запуска: $e';
@@ -214,8 +238,61 @@ class CollectionState extends ChangeNotifier {
     await _loadTags();
     _folderCounts = await _service.countByFolder();
     _items = _applySort(await _loadItems());
+    await _loadVideoThumbnails();
     _isLoading = false;
     notifyListeners();
+  }
+
+  /// Перечитывает список существующих файлов превью из каталога .thumbs.
+  Future<void> _loadVideoThumbnails() async {
+    try {
+      final files = await _service.listThumbnailPaths();
+      final known = files.toSet();
+      // Оставляем только те пути видео, чьё превью реально существует.
+      _videoThumbnails
+        ..clear()
+        ..addAll(_items
+            .where((i) => i.isVideo && known.contains(_service.thumbnailPathFor(i.path)))
+            .map((i) => i.path));
+    } catch (e) {
+      debugPrint('loadVideoThumbnails error: $e');
+    }
+  }
+
+  /// Достраивает превью для видео без кадра (после запуска приложения).
+  Future<void> _backfillVideoThumbnails() async {
+    try {
+      final all = await _service.getItems();
+      for (final item in all) {
+        if (!item.isVideo) continue;
+        if (!VideoThumbnailService.instance.isAvailable) return;
+        if (_videoThumbnails.contains(item.path)) continue;
+        await _ensureVideoThumbnail(item.path);
+      }
+    } catch (e) {
+      debugPrint('backfillVideoThumbnails error: $e');
+    }
+  }
+
+  /// Гарантирует наличие превью-кадра для видеофайла (извлекает при
+  /// отсутствии). Вызывается при импорте и в фоновом достраивании.
+  Future<void> _ensureVideoThumbnail(String videoPath) async {
+    final thumbPath = _service.thumbnailPathFor(videoPath);
+    try {
+      if (File(thumbPath).existsSync()) {
+        if (_videoThumbnails.add(videoPath)) notifyListeners();
+        return;
+      }
+      await _service.ensureThumbnailsDir();
+      final saved = await VideoThumbnailService.instance
+          .extractToFile(videoPath, thumbPath);
+      if (saved != null) {
+        _videoThumbnails.add(videoPath);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('ensureVideoThumbnail error: $e');
+    }
   }
 
   /// Загрузка элементов с учётом выбранного раздела, поиска и фильтров.

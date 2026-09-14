@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../data/settings_repository.dart';
 import '../features/collection/collection_state.dart';
 import '../features/settings/theme_provider.dart';
+import '../widgets/app_dialog.dart';
 import '../widgets/content_area.dart';
 import '../widgets/left_panel.dart';
 import '../widgets/panel_drag_handle.dart';
@@ -156,8 +157,8 @@ class _MainScreenState extends State<MainScreen> {
 
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Настройки'),
+      builder: (dialogContext) => AppDialog(
+        title: 'Настройки',
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

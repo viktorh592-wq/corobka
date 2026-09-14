@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../data/models/item.dart';
 import '../features/collection/collection_state.dart';
+import 'app_dialog.dart';
 import 'duplicates_dialog.dart';
 import 'drop_zone.dart';
 import 'lightbox_viewer.dart';
@@ -206,14 +207,30 @@ class _ToolbarState extends State<_Toolbar> {
                               horizontal: 16,
                               vertical: 10,
                             ),
+                            // Явная обводка: в тёмной теме стандартная граница
+                            // почти не видна — задаём контрастный цвет.
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant,
+                              ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 1.6,
+                              ),
                             ),
                             suffixIcon: state.searchQuery.isNotEmpty
                                 ? IconButton(
@@ -348,8 +365,8 @@ class _ToolbarState extends State<_Toolbar> {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Очистить корзину?'),
+      builder: (context) => AppDialog(
+        title: 'Очистить корзину?',
         content: Text(
           'Все ${state.items.length} элементов будут удалены безвозвратно '
           'вместе с файлами на диске.',
@@ -530,44 +547,29 @@ class _ItemCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(8),
+            // В masonry-режиме (showFullImage) высота ячейки не ограничена —
+            // Expanded внутри Column там запрещён (ошибка макета «non-zero
+            // flex with unbounded height», из-за которой карточки исчезали).
+            // Используем AspectRatio с реальными пропорциями файла.
+            if (showFullImage)
+              AspectRatio(
+                aspectRatio: _aspectRatio,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(8),
+                  ),
+                  child: _mediaArea(context, state),
                 ),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Видео/аудио не декодируются как изображения —
-                    // показываем понятный плейсхолдер.
-                    if (item.isImage)
-                      Image.file(
-                        File(item.path),
-                        fit: showFullImage ? BoxFit.contain : BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest,
-                          child: const Icon(Icons.broken_image_outlined),
-                        ),
-                      )
-                    else
-                      MediaPlaceholder(item: item),
-                    if (item.isFavorite)
-                      const Positioned(
-                        top: 4,
-                        right: 4,
-                        child: Icon(
-                          Icons.star,
-                          size: 18,
-                          color: Colors.amber,
-                          shadows: [Shadow(blurRadius: 4)],
-                        ),
-                      ),
-                  ],
+              )
+            else
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(8),
+                  ),
+                  child: _mediaArea(context, state),
                 ),
               ),
-            ),
             Padding(
               padding: const EdgeInsets.all(4),
               child: Text(
@@ -580,6 +582,49 @@ class _ItemCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// Пропорции файла для masonry-режима (fallback 1:1 без метаданных).
+  double get _aspectRatio {
+    final w = item.width;
+    final h = item.height;
+    if (w != null && h != null && w > 0 && h > 0) return w / h;
+    return 1.0;
+  }
+
+  /// Область медиа карточки: изображение, превью-кадр видео или плейсхолдер.
+  Widget _mediaArea(BuildContext context, CollectionState state) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Видео/аудио не декодируются как изображения — показываем
+        // понятный плейсхолдер; для видео — извлечённый превью-кадр.
+        if (item.isImage)
+          Image.file(
+            File(item.path),
+            fit: showFullImage ? BoxFit.contain : BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: const Icon(Icons.broken_image_outlined),
+            ),
+          )
+        else if (item.isVideo && state.hasVideoThumbnail(item.path))
+          _VideoThumbCard(item: item, state: state)
+        else
+          MediaPlaceholder(item: item),
+        if (item.isFavorite)
+          const Positioned(
+            top: 4,
+            right: 4,
+            child: Icon(
+              Icons.star,
+              size: 18,
+              color: Colors.amber,
+              shadows: [Shadow(blurRadius: 4)],
+            ),
+          ),
+      ],
     );
   }
 
@@ -701,34 +746,70 @@ class _ItemCard extends StatelessWidget {
     final folders = state.folders;
     final selected = await showDialog<int?>(
       context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Переместить в папку'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, -1),
-            child: const ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.folder_off_outlined),
-              title: Text('Без папки (корень)'),
-            ),
-          ),
-          for (final folder in folders)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, folder.id),
-              child: ListTile(
+      builder: (context) => AppDialog(
+        title: 'Переместить в папку',
+        content: SizedBox(
+          width: 280,
+          height: 300,
+          child: ListView(
+            shrinkWrap: false,
+            children: [
+              ListTile(
                 dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.folder_outlined),
-                title: Text(folder.name),
+                leading: const Icon(Icons.folder_off_outlined),
+                title: const Text('Без папки (корень)'),
+                onTap: () => Navigator.pop(context, -1),
               ),
-            ),
-        ],
+              for (final folder in folders)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.folder_outlined),
+                  title: Text(folder.name),
+                  onTap: () => Navigator.pop(context, folder.id),
+                ),
+            ],
+          ),
+        ),
       ),
     );
 
     if (selected == null) return;
     await state.moveItemToFolder(selected == -1 ? null : selected);
+  }
+}
+
+/// Превью-кадр видео на карточке файла: изображение + значок «play».
+class _VideoThumbCard extends StatelessWidget {
+  const _VideoThumbCard({required this.item, required this.state});
+
+  final CollectionItem item;
+  final CollectionState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbPath = state.videoThumbnailPath(item.path);
+    if (thumbPath == null) {
+      return MediaPlaceholder(item: item);
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.file(
+          File(thumbPath),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => MediaPlaceholder(item: item),
+        ),
+        // Полупрозрачная кнопка «play» — сразу видно, что это ролик.
+        Center(
+          child: Icon(
+            Icons.play_circle_outline,
+            size: 40,
+            color: Colors.white.withValues(alpha: 0.9),
+            shadows: const [Shadow(blurRadius: 8, color: Colors.black54)],
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -787,7 +868,30 @@ class _ItemListRow extends StatelessWidget {
                               const Icon(Icons.broken_image_outlined, size: 20),
                         ),
                       )
-                    : MediaPlaceholder(item: item),
+                    : (item.isVideo && state.hasVideoThumbnail(item.path))
+                        ? Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.file(
+                                File(state.videoThumbnailPath(item.path)!),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    MediaPlaceholder(item: item),
+                              ),
+                              Center(
+                                child: Icon(
+                                  Icons.play_circle_outline,
+                                  size: 22,
+                                  color:
+                                      Colors.white.withValues(alpha: 0.9),
+                                  shadows: const [
+                                    Shadow(blurRadius: 6, color: Colors.black54),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        : MediaPlaceholder(item: item),
               ),
             ),
             const SizedBox(width: 12),
@@ -936,8 +1040,8 @@ class _ColorFilterDialogState extends State<_ColorFilterDialog> {
     final currentColor = _hsv.toColor();
     final selectedHex = widget.state.filterColor;
 
-    return AlertDialog(
-      title: const Text('Фильтр по цвету'),
+    return AppDialog(
+      title: 'Фильтр по цвету',
       content: SizedBox(
         width: 360,
         child: SingleChildScrollView(

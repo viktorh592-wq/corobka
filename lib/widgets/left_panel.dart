@@ -1,9 +1,12 @@
 import '../theme/app_theme.dart';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models/folder.dart';
 import '../features/collection/collection_state.dart';
+import 'app_dialog.dart';
 
 /// Левая панель навигации по коллекции.
 ///
@@ -11,8 +14,21 @@ import '../features/collection/collection_state.dart';
 /// пользовательские папки со счётчиками. Папки образуют иерархию —
 /// внутри любой папки можно создавать подпапки (рекурсивно). Поддерживает
 /// создание, переименование, удаление папок и фильтрацию по тегам.
-class LeftPanel extends StatelessWidget {
+///
+/// Все заголовки секций выполнены в едином стиле: иконка в акцентном
+/// («управляющем») цвете + крупный полужирный текст. Диалог создания
+/// папки открывается рядом с кнопкой «+».
+class LeftPanel extends StatefulWidget {
   const LeftPanel({super.key});
+
+  @override
+  State<LeftPanel> createState() => _LeftPanelState();
+}
+
+class _LeftPanelState extends State<LeftPanel> {
+  /// Ключ кнопки «+» — по нему вычисляется позиция диалога создания папки
+  /// (окно открывается рядом с кнопкой, а не в центре экрана).
+  final GlobalKey _addFolderButtonKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +46,10 @@ class LeftPanel extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          const _SectionHeader('Коллекция'),
+          const _SectionHeader(
+            'Коллекция',
+            icon: Icons.collections_bookmark_outlined,
+          ),
           _SystemTile(
             id: 'all',
             icon: Icons.photo_library_outlined,
@@ -44,20 +63,14 @@ class LeftPanel extends StatelessWidget {
           ),
           const _TagsSection(),
           const Divider(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text('Папки',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-                IconButton(
-                  tooltip: 'Создать папку',
-                  icon: const Icon(Icons.add, size: 20),
-                  onPressed: () => _createFolderDialog(context, state),
-                ),
-              ],
+          _SectionHeader(
+            'Папки',
+            icon: Icons.folder_outlined,
+            trailing: IconButton(
+              key: _addFolderButtonKey,
+              tooltip: 'Создать папку',
+              icon: const Icon(Icons.add, size: 20),
+              onPressed: () => _createFolderDialog(context, state),
             ),
           ),
           for (final folder in rootFolders)
@@ -83,37 +96,165 @@ class LeftPanel extends StatelessWidget {
     );
   }
 
+  /// Диалог создания папки. Открывается рядом с кнопкой «+» (по её
+  /// глобальной позиции), а не в центре экрана.
   Future<void> _createFolderDialog(
       BuildContext context, CollectionState state) async {
-    final nameController = TextEditingController();
-    final name = await showDialog<String>(
+    final name = await _showFolderNameDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Новая папка'),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Название папки',
-            hintText: 'Например: Интерфейсы',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, nameController.text),
-            child: const Text('Создать'),
-          ),
-        ],
-      ),
+      title: 'Новая папка',
+      label: 'Название папки',
+      hint: 'Например: Интерфейсы',
+      confirmLabel: 'Создать',
+      anchorKey: _addFolderButtonKey,
     );
 
     if (name != null && name.trim().isNotEmpty) {
       await state.createFolder(name.trim());
     }
+  }
+}
+
+/// Диалог ввода имени папки/подпапки.
+///
+/// Если передан [anchorKey] — окно позиционируется рядом с элементом
+/// (кнопкой «+»), иначе — по центру экрана. В правом верхнем углу —
+/// «крестик» закрытия.
+Future<String?> _showFolderNameDialog({
+  required BuildContext context,
+  required String title,
+  required String label,
+  required String hint,
+  required String confirmLabel,
+  GlobalKey? anchorKey,
+  String? initialText,
+}) async {
+  final controller = TextEditingController(text: initialText);
+  try {
+    return await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        // Вычисляем отступ диалога от краёв экрана так, чтобы окно
+        // появилось сразу под кнопкой «+» (по её глобальной позиции).
+        EdgeInsets insetPadding = const EdgeInsets.all(24);
+        if (anchorKey != null) {
+          final anchorContext = anchorKey.currentContext;
+          final overlay =
+              Overlay.of(dialogContext).context.findRenderObject();
+          if (anchorContext != null &&
+              overlay is RenderBox &&
+              anchorContext.findRenderObject() is RenderBox) {
+            final box = anchorContext.findRenderObject() as RenderBox;
+            if (box.attached && overlay.attached) {
+              final topLeft =
+                  box.localToGlobal(Offset.zero, ancestor: overlay);
+              final bottomLeft = topLeft + Offset(0, box.size.height);
+              insetPadding = EdgeInsets.only(
+                left: math.max(8.0, topLeft.dx - 4),
+                top: bottomLeft.dy + 8,
+                right: 8,
+                bottom: 8,
+              );
+            }
+          }
+        }
+
+        return Dialog(
+          alignment: Alignment.topLeft,
+          insetPadding: insetPadding,
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: _FolderNameCard(
+            title: title,
+            label: label,
+            hint: hint,
+            confirmLabel: confirmLabel,
+            controller: controller,
+          ),
+        );
+      },
+    );
+  } finally {
+    controller.dispose();
+  }
+}
+
+/// Карточка диалога ввода имени (в стиле AlertDialog, но компактнее
+/// и с «крестиком» в правом верхнем углу).
+class _FolderNameCard extends StatelessWidget {
+  const _FolderNameCard({
+    required this.title,
+    required this.label,
+    required this.hint,
+    required this.confirmLabel,
+    required this.controller,
+  });
+
+  final String title;
+  final String label;
+  final String hint;
+  final String confirmLabel;
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHigh,
+      elevation: 12,
+      shadowColor: Colors.black45,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: SizedBox(
+        width: 300,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 12, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Закрыть',
+                    icon: const Icon(Icons.close, size: 22),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: InputDecoration(labelText: label, hintText: hint),
+                onSubmitted: (v) => Navigator.of(context).pop(v),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Отмена'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () =>
+                        Navigator.of(context).pop(controller.text),
+                    child: Text(confirmLabel),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -138,7 +279,11 @@ class _TagsSectionState extends State<_TagsSection> {
       children: [
         ListTile(
           dense: true,
-          leading: const Icon(Icons.tag, size: 20),
+          leading: Icon(
+            Icons.tag,
+            size: 20,
+            color: Theme.of(context).colorScheme.primary,
+          ),
           title: const Text('Теги'),
           selected: state.filterTagId != null && !_expanded,
           selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
@@ -152,10 +297,10 @@ class _TagsSectionState extends State<_TagsSection> {
                         color: Theme.of(context).colorScheme.outline,
                       ),
                 ),
-              Icon(
-                _expanded ? Icons.expand_less : Icons.expand_more,
-                size: 20,
-              ),
+            Icon(
+              _expanded ? Icons.expand_less : Icons.expand_more,
+              size: 20,
+            ),
             ],
           ),
           onTap: () {
@@ -189,7 +334,11 @@ class _TagsSectionState extends State<_TagsSection> {
                 child: ListTile(
                   dense: true,
                   visualDensity: VisualDensity.compact,
-                  leading: const Icon(Icons.label_outline, size: 16),
+                  leading: Icon(
+                    Icons.label_outline,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   title: Text(tag.name),
                   trailing: Text(
                     '${counts[tag.id] ?? 0}',
@@ -210,22 +359,41 @@ class _TagsSectionState extends State<_TagsSection> {
   }
 }
 
-/// Заголовок секции.
+/// Заголовок секции — единый стиль для всех блоков панели:
+/// иконка в акцентном цвете + крупный полужирный текст.
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.label);
+  const _SectionHeader(this.label, {this.icon, this.trailing});
 
   final String label;
+  final IconData? icon;
+
+  /// Опциональный элемент справа (например, кнопка «+»).
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: Theme.of(context).colorScheme.outline,
-              letterSpacing: 1.2,
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 6),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 16, color: scheme.primary),
+            const SizedBox(width: 6),
+          ],
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                    color: scheme.onSurfaceVariant,
+                  ),
             ),
+          ),
+          if (trailing != null) trailing!,
+        ],
       ),
     );
   }
@@ -252,8 +420,12 @@ class _SystemTile extends StatelessWidget {
 
     return ListTile(
       dense: true,
-      leading: Icon(icon, size: 20),
-      title: Text(label),
+      // Иконки в акцентном цвете элементов управления — единый стиль UI.
+      leading: Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+      title: Text(
+        label,
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
       trailing: count != null && count! > 0
           ? Text(
               '$count',
@@ -324,10 +496,18 @@ class _FolderTileState extends State<_FolderTile> {
                     )
                   else
                     const SizedBox(width: 22),
-                  const Icon(Icons.folder_outlined, size: 20),
+                  // Иконка папки — в акцентном цвете элементов управления.
+                  Icon(
+                    Icons.folder_outlined,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 ],
               ),
-              title: Text(widget.folder.name),
+              title: Text(
+                widget.folder.name,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
               trailing: count != null && count > 0
                   ? Text(
                       '$count',
@@ -360,6 +540,15 @@ class _FolderTileState extends State<_FolderTile> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // «Крестик» закрытия в правом верхнем углу меню.
+            Align(
+              alignment: Alignment.topRight,
+              child: IconButton(
+                tooltip: 'Закрыть',
+                icon: const Icon(Icons.close, size: 20),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
             ListTile(
               leading: const Icon(Icons.create_new_folder_outlined),
               title: const Text('Добавить подпапку'),
@@ -399,30 +588,12 @@ class _FolderTileState extends State<_FolderTile> {
     BuildContext context,
     CollectionState state,
   ) async {
-    final nameController = TextEditingController();
-    final name = await showDialog<String>(
+    final name = await _showFolderNameDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Подпапка в «${widget.folder.name}»'),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Название подпапки',
-            hintText: 'Например: Иконки',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, nameController.text),
-            child: const Text('Создать'),
-          ),
-        ],
-      ),
+      title: 'Подпапка в «${widget.folder.name}»',
+      label: 'Название подпапки',
+      hint: 'Например: Иконки',
+      confirmLabel: 'Создать',
     );
 
     if (name != null && name.trim().isNotEmpty) {
@@ -432,26 +603,13 @@ class _FolderTileState extends State<_FolderTile> {
 
   Future<void> _renameDialog(
       BuildContext context, CollectionState state) async {
-    final nameController = TextEditingController(text: widget.folder.name);
-    final name = await showDialog<String>(
+    final name = await _showFolderNameDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Переименовать папку'),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, nameController.text),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
+      title: 'Переименовать папку',
+      label: 'Название папки',
+      hint: '',
+      confirmLabel: 'Сохранить',
+      initialText: widget.folder.name,
     );
 
     if (name != null && name.trim().isNotEmpty) {
@@ -463,8 +621,8 @@ class _FolderTileState extends State<_FolderTile> {
       BuildContext context, CollectionState state) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить папку?'),
+      builder: (context) => AppDialog(
+        title: 'Удалить папку?',
         content: Text(
           'Папка «${widget.folder.name}» будет удалена. Элементы не удаляются — '
           'они останутся в коллекции без папки. Подпапки поднимутся '

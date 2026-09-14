@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/models/item.dart';
 import '../features/collection/collection_state.dart';
+import 'app_dialog.dart';
 
 /// Диалог поиска и обработки дубликатов.
 ///
@@ -38,8 +39,8 @@ class _DuplicatesDialogState extends State<DuplicatesDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Поиск дубликатов'),
+    return AppDialog(
+      title: 'Поиск дубликатов',
       content: SizedBox(
         width: 520,
         height: 420,

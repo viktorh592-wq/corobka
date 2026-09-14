@@ -69,6 +69,43 @@ class CollectionService {
     return '$root${Platform.pathSeparator}images';
   }
 
+  /// Каталог превью-кадров видео (скрытая папка в корне коллекции).
+  String get thumbnailsPath {
+    final root = _rootPath ?? Directory.current.path;
+    return '$root${Platform.pathSeparator}.thumbs';
+  }
+
+  /// Путь к файлу превью для исходного видеофайла (по хэшу полного пути —
+  /// без коллизий и без изменения схемы БД).
+  String thumbnailPathFor(String sourcePath) {
+    final key = md5.convert(sourcePath.codeUnits).toString();
+    return '$thumbnailsPath${Platform.pathSeparator}$key.jpg';
+  }
+
+  /// Создание каталога превью (если его ещё нет).
+  Future<void> ensureThumbnailsDir() async {
+    final dir = Directory(thumbnailsPath);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+  }
+
+  /// Список всех существующих файлов превью (полные пути).
+  Future<List<String>> listThumbnailPaths() async {
+    try {
+      final dir = Directory(thumbnailsPath);
+      if (!await dir.exists()) return const [];
+      final result = <String>[];
+      await for (final entity in dir.list()) {
+        if (entity is File) result.add(entity.path);
+      }
+      return result;
+    } catch (e) {
+      debugPrint('listThumbnailPaths error: $e');
+      return const [];
+    }
+  }
+
   Future<String> _defaultRootPath() async {
     // Пытаемся использовать каталог поддержки приложения.
     try {
