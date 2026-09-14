@@ -17,7 +17,9 @@ class LeftPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<PanelColors>()!;
+    // Fallback на случай темы без расширения PanelColors.
+    final colors = Theme.of(context).extension<PanelColors>() ??
+        PanelColors.fallback(Theme.of(context).brightness);
     final state = context.watch<CollectionState>();
 
     return Material(
@@ -138,6 +140,7 @@ class _TagsSectionState extends State<_TagsSection> {
   Widget build(BuildContext context) {
     final state = context.watch<CollectionState>();
     final tags = state.tags;
+    final counts = state.tagCounts;
 
     return Column(
       children: [
@@ -148,11 +151,31 @@ class _TagsSectionState extends State<_TagsSection> {
           selected: state.filterTagId != null && !_expanded,
           selectedTileColor:
               Theme.of(context).colorScheme.secondaryContainer,
-          trailing: Icon(
-            _expanded ? Icons.expand_less : Icons.expand_more,
-            size: 20,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (tags.isNotEmpty)
+                Text(
+                  '${tags.length}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                ),
+              Icon(
+                _expanded ? Icons.expand_less : Icons.expand_more,
+                size: 20,
+              ),
+            ],
           ),
-          onTap: () => setState(() => _expanded = !_expanded),
+          onTap: () {
+            setState(() => _expanded = !_expanded);
+            if (_expanded) {
+              // ЗАЩИТНЫЙ РЕФРЕШ: перечитываем теги прямо из БД при каждом
+              // раскрытии раздела. Даже если уведомление где-то было
+              // потеряно — пользователь всегда видит актуальный список.
+              context.read<CollectionState>().refreshTags();
+            }
+          },
         ),
         if (_expanded)
           if (tags.isEmpty)
@@ -177,6 +200,12 @@ class _TagsSectionState extends State<_TagsSection> {
                   visualDensity: VisualDensity.compact,
                   leading: const Icon(Icons.label_outline, size: 16),
                   title: Text(tag.name),
+                  trailing: Text(
+                    '${counts[tag.id] ?? 0}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                  ),
                   selected: state.filterTagId == tag.id,
                   selectedTileColor:
                       Theme.of(context).colorScheme.secondaryContainer,

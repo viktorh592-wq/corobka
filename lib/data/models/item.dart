@@ -1,3 +1,6 @@
+/// Тип медиафайла (определяется по расширению).
+enum ItemKind { image, video, audio }
+
 ///
 /// Содержит метаданные изображения: название, путь к файлу,
 /// размеры, формат, палитру и заметки.
@@ -15,6 +18,8 @@ class CollectionItem {
     this.isFavorite = false,
     required this.createdAt,
     this.deletedAt,
+    this.hash,
+    this.bpm,
   });
 
   /// Уникальный идентификатор элемента.
@@ -55,8 +60,46 @@ class CollectionItem {
   /// в корзину и может быть отменено).
   final int? deletedAt;
 
+  /// SHA-256 хэш содержимого файла (для поиска дубликатов).
+  final String? hash;
+
+  /// Значение BPM (ударов в минуту) для аудиофайлов.
+  final int? bpm;
+
   /// Элемент находится в корзине.
   bool get isTrashed => deletedAt != null;
+
+  /// Тип медиафайла — определяется по расширению.
+  ItemKind get kind => kindOfExtension(format ?? _extensionOf(path));
+
+  /// Это видеофайл?
+  bool get isVideo => kind == ItemKind.video;
+
+  /// Это аудиофайл?
+  bool get isAudio => kind == ItemKind.audio;
+
+  /// Это изображение?
+  bool get isImage => kind == ItemKind.image;
+
+  static String _extensionOf(String path) {
+    final name = path.split('/').last.split('\\').last;
+    final idx = name.lastIndexOf('.');
+    return idx == -1 ? '' : name.substring(idx + 1);
+  }
+
+  /// Определение типа файла по расширению (без точки).
+  static ItemKind kindOfExtension(String ext) {
+    final e = ext.toLowerCase();
+    const videoExts = {
+      'mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'wmv', 'flv',
+    };
+    const audioExts = {
+      'mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma', 'opus',
+    };
+    if (videoExts.contains(e)) return ItemKind.video;
+    if (audioExts.contains(e)) return ItemKind.audio;
+    return ItemKind.image;
+  }
 
   /// Создание объекта из строки БД (SQLite row).
   factory CollectionItem.fromMap(Map<String, dynamic> map) {
@@ -73,6 +116,8 @@ class CollectionItem {
       isFavorite: (map['is_favorite'] as int) == 1,
       createdAt: map['created_at'] as int,
       deletedAt: map['deleted_at'] as int?,
+      hash: map['hash'] as String?,
+      bpm: map['bpm'] as int?,
     );
   }
 
@@ -90,6 +135,8 @@ class CollectionItem {
       'is_favorite': isFavorite ? 1 : 0,
       'created_at': createdAt,
       'deleted_at': deletedAt,
+      'hash': hash,
+      'bpm': bpm,
     };
   }
 
@@ -107,9 +154,12 @@ class CollectionItem {
     bool? isFavorite,
     int? createdAt,
     int? deletedAt,
+    String? hash,
+    int? bpm,
     bool clearFolderId = false,
     bool clearDeletedAt = false,
     bool clearNotes = false,
+    bool clearBpm = false,
   }) {
     return CollectionItem(
       id: id ?? this.id,
@@ -124,6 +174,8 @@ class CollectionItem {
       isFavorite: isFavorite ?? this.isFavorite,
       createdAt: createdAt ?? this.createdAt,
       deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+      hash: hash ?? this.hash,
+      bpm: clearBpm ? null : (bpm ?? this.bpm),
     );
   }
 

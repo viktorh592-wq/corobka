@@ -2,19 +2,78 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../data/settings_repository.dart';
 import '../features/collection/collection_state.dart';
 import '../features/settings/theme_provider.dart';
 import '../widgets/content_area.dart';
 import '../widgets/left_panel.dart';
+import '../widgets/panel_drag_handle.dart';
 import '../widgets/right_panel.dart';
 
 /// Главный экран приложения.
 ///
 /// Компоновка трёх областей: левая панель навигации, центральная область
-/// контента и правая панель деталей. Поддерживает горячие клавиши и настройки
+/// контента и правая панель деталей. Границы панелей ПЕРЕТАСКИВАЮТСЯ
+/// мышью (зажать границу — потянуть — ширину можно менять; размер
+/// сохраняется между запусками). Поддерживает горячие клавиши и настройки
 /// (тема, корневой каталог коллекции).
-class MainScreen extends StatelessWidget {
+class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
+
+  @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  /// Ограничения ширины панелей (как в Eagle — разумные границы).
+  static const double _leftMin = 170, _leftMax = 460;
+  static const double _rightMin = 220, _rightMax = 560;
+
+  double _leftWidth = 220;
+  double _rightWidth = 260;
+
+  final SettingsRepository _settings = SettingsRepository();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPanelWidths();
+  }
+
+  /// Загрузка сохранённых ширин панелей.
+  Future<void> _loadPanelWidths() async {
+    try {
+      final left = await _settings.loadLeftPanelWidth();
+      final right = await _settings.loadRightPanelWidth();
+      if (!mounted) return;
+      setState(() {
+        if (left != null) _leftWidth = left.clamp(_leftMin, _leftMax);
+        if (right != null) _rightWidth = right.clamp(_rightMin, _rightMax);
+      });
+    } catch (_) {
+      // Настройки недоступны — работаем с ширинами по умолчанию.
+    }
+  }
+
+  void _onLeftDrag(double delta) {
+    setState(() {
+      _leftWidth = (_leftWidth + delta).clamp(_leftMin, _leftMax);
+    });
+  }
+
+  void _onRightDrag(double delta) {
+    // Правая панель: тянем границу влево — панель шире.
+    setState(() {
+      _rightWidth = (_rightWidth - delta).clamp(_rightMin, _rightMax);
+    });
+  }
+
+  Future<void> _savePanelWidths() async {
+    try {
+      await _settings.saveLeftPanelWidth(_leftWidth);
+      await _settings.saveRightPanelWidth(_rightWidth);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,13 +121,18 @@ class MainScreen extends StatelessWidget {
               ),
             ],
           ),
-          body: const Row(
+          body: Row(
             children: [
-              SizedBox(width: 220, child: LeftPanel()),
-              VerticalDivider(width: 1),
-              Expanded(child: ContentArea()),
-              VerticalDivider(width: 1),
-              SizedBox(width: 260, child: RightPanel()),
+              SizedBox(width: _leftWidth, child: const LeftPanel()),
+              // Перетаскиваемая граница левой панели.
+              PanelDragHandle(onDrag: _onLeftDrag, onDragEnd: _savePanelWidths),
+              const Expanded(child: ContentArea()),
+              // Перетаскиваемая граница правой панели.
+              PanelDragHandle(
+                onDrag: _onRightDrag,
+                onDragEnd: _savePanelWidths,
+              ),
+              SizedBox(width: _rightWidth, child: const RightPanel()),
             ],
           ),
         ),

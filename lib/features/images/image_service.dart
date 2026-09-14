@@ -10,7 +10,7 @@ class ImageService {
   const ImageService();
 
   /// Поддерживаемые расширения файлов изображений.
-  static const List<String> supportedExtensions = [
+  static const List<String> imageExtensions = [
     'png',
     'jpg',
     'jpeg',
@@ -22,7 +22,38 @@ class ImageService {
     'ico',
   ];
 
-  /// Открытие системного диалога выбора файлов изображений.
+  /// Поддерживаемые расширения видеофайлов.
+  static const List<String> videoExtensions = [
+    'mp4',
+    'mov',
+    'avi',
+    'mkv',
+    'webm',
+    'm4v',
+    'wmv',
+    'flv',
+  ];
+
+  /// Поддерживаемые расширения аудиофайлов.
+  static const List<String> audioExtensions = [
+    'mp3',
+    'wav',
+    'flac',
+    'ogg',
+    'm4a',
+    'aac',
+    'wma',
+    'opus',
+  ];
+
+  /// Все поддерживаемые расширения (изображения + видео + аудио).
+  static List<String> get supportedExtensions => [
+        ...imageExtensions,
+        ...videoExtensions,
+        ...audioExtensions,
+      ];
+
+  /// Открытие системного диалога выбора файлов (изображения, видео, аудио).
   ///
   /// Возвращает список путей к выбранным файлам.
   Future<List<String>> pickImageFiles() async {
@@ -44,11 +75,19 @@ class ImageService {
     return path;
   }
 
-  /// Проверка, что файл является поддерживаемым изображением.
+  /// Проверка, что файл является поддерживаемым медиафайлом.
   bool isSupported(String path) {
     final ext = _extensionOf(path).toLowerCase();
     return supportedExtensions.contains(ext);
   }
+
+  /// Является ли файл видео.
+  bool isVideo(String path) =>
+      videoExtensions.contains(_extensionOf(path).toLowerCase());
+
+  /// Является ли файл аудио.
+  bool isAudio(String path) =>
+      audioExtensions.contains(_extensionOf(path).toLowerCase());
 
   /// Получение списка файлов изображений в папке (рекурсивно).
   Future<List<String>> listImagesInDirectory(String directoryPath) async {

@@ -59,6 +59,17 @@ class PanelColors extends ThemeExtension<PanelColors> {
     required this.contentBackground,
   });
 
+  /// Резервная палитра для случая, когда тема не задаёт расширение
+  /// (например, сторонний MaterialApp без AppTheme) — раньше падало
+  /// с «Null check operator used on a null value».
+  factory PanelColors.fallback(Brightness brightness) {
+    final dark = brightness == Brightness.dark;
+    return PanelColors(
+      panel: dark ? const Color(0xFF1E1F24) : const Color(0xFFF3F3F5),
+      contentBackground: dark ? const Color(0xFF161719) : Colors.white,
+    );
+  }
+
   /// Цвет левой и правой панелей.
   final Color panel;
 

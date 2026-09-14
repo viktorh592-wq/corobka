@@ -10,17 +10,53 @@ class TagDao {
   Future<Database> get _db => AppDatabase.instance();
 
   /// Создание тега (если его ещё нет). Возвращает идентификатор тега.
+  ///
+  /// ВАЖНО: сравнение регистронезависимое и выполняется В DART, потому что
+  /// SQLite `COLLATE NOCASE` сворачивает только ASCII (A-Z) и НЕ работает
+  /// для кириллицы («Природа» и «природа» были бы разными тегами).
   Future<int> ensureTag(String name) async {
     final db = await _db;
-    final rows = await db.query(
-      'tags',
-      where: 'name = ?',
-      whereArgs: [name],
-      limit: 1,
-    );
-    if (rows.isNotEmpty) return rows.first['id'] as int;
+    final trimmed = name.trim();
+    final lower = trimmed.toLowerCase();
 
-    return db.insert('tags', {'name': name});
+    final all = await db.query('tags');
+    for (final row in all) {
+      if ((row['name'] as String).toLowerCase() == lower) {
+        return row['id'] as int;
+      }
+    }
+
+    try {
+      return await db.insert('tags', {'name': trimmed});
+    } catch (e) {
+      // Гонка с параллельной вставкой (UNIQUE) — перечитываем.
+      final again = await db.query('tags');
+      for (final row in again) {
+        if ((row['name'] as String).toLowerCase() == lower) {
+          return row['id'] as int;
+        }
+      }
+      rethrow;
+    }
+  }
+
+  /// Получение всех тегов с количеством элементов, к которым они привязаны.
+  Future<List<(Tag, int)>> getAllWithCounts() async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT t.id, t.name, COUNT(it.item_id) AS cnt
+      FROM tags t
+      LEFT JOIN item_tags it ON it.tag_id = t.id
+      GROUP BY t.id
+      ORDER BY t.name COLLATE NOCASE
+    ''');
+    return [
+      for (final row in rows)
+        (
+          Tag(id: row['id'] as int, name: row['name'] as String),
+          row['cnt'] as int,
+        ),
+    ];
   }
 
   /// Получение всех тегов.

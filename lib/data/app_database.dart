@@ -12,7 +12,7 @@ class AppDatabase {
   AppDatabase._();
 
   static const _dbName = 'korobka.db';
-  static const _dbVersion = 2;
+  static const _dbVersion = 3;
 
   static Database? _instance;
 
@@ -88,7 +88,9 @@ class AppDatabase {
         notes TEXT,
         is_favorite INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
-        deleted_at INTEGER
+        deleted_at INTEGER,
+        hash TEXT,
+        bpm INTEGER
       )
     ''');
 
@@ -134,6 +136,20 @@ class AppDatabase {
       final hasColumn = cols.any((c) => c['name'] == 'deleted_at');
       if (!hasColumn) {
         await db.execute('ALTER TABLE items ADD COLUMN deleted_at INTEGER');
+      }
+    }
+
+    if (oldVersion < 3) {
+      // v3: дубликаты (SHA-256 хэш файла) и BPM для аудио.
+      // Колонки могли уже появиться, если БД создана свежим кодом.
+      final cols = await db.rawQuery('PRAGMA table_info(items)');
+      final hasHash = cols.any((c) => c['name'] == 'hash');
+      if (!hasHash) {
+        await db.execute('ALTER TABLE items ADD COLUMN hash TEXT');
+      }
+      final hasBpm = cols.any((c) => c['name'] == 'bpm');
+      if (!hasBpm) {
+        await db.execute('ALTER TABLE items ADD COLUMN bpm INTEGER');
       }
     }
   }

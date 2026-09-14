@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../features/collection/collection_state.dart';
@@ -18,7 +19,9 @@ class RightPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<PanelColors>()!;
+    // Fallback на случай темы без расширения PanelColors.
+    final colors = Theme.of(context).extension<PanelColors>() ??
+        PanelColors.fallback(Theme.of(context).brightness);
     final state = context.watch<CollectionState>();
     final item = state.selectedItem;
 
@@ -71,7 +74,7 @@ class _ItemDetails extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _Preview(imagePath: item.path),
+        _Preview(item: item),
         const SizedBox(height: 16),
         _TitleEditor(item: item),
         const Divider(),
@@ -82,6 +85,10 @@ class _ItemDetails extends StatelessWidget {
           const Divider(),
           _TagsBlock(item: item),
           const Divider(),
+          if (item.isAudio) ...[
+            _BpmBlock(item: item),
+            const Divider(),
+          ],
           _NotesEditor(item: item),
           const SizedBox(height: 12),
           _ActionsBlock(item: item),
@@ -101,27 +108,55 @@ class _ItemDetails extends StatelessWidget {
   }
 }
 
-/// Превью изображения.
+/// Превью элемента: изображение, видео или аудио.
 class _Preview extends StatelessWidget {
-  const _Preview({required this.imagePath});
+  const _Preview({required this.item});
 
-  final String imagePath;
+  final CollectionItem item;
 
   @override
   Widget build(BuildContext context) {
+    Widget content;
+    if (item.isVideo) {
+      content = Container(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.movie_outlined, size: 48),
+            const SizedBox(height: 8),
+            Text('Видео · ${item.format?.toUpperCase() ?? ''}',
+                style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      );
+    } else if (item.isAudio) {
+      content = Container(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.audio_file_outlined, size: 48),
+            const SizedBox(height: 8),
+            Text('Аудио · ${item.format?.toUpperCase() ?? ''}',
+                style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      );
+    } else {
+      content = Image.file(
+        File(item.path),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: const Icon(Icons.broken_image_outlined, size: 40),
+        ),
+      );
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      child: AspectRatio(
-        aspectRatio: 16 / 10,
-        child: Image.file(
-          File(imagePath),
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: const Icon(Icons.broken_image_outlined, size: 40),
-          ),
-        ),
-      ),
+      child: AspectRatio(aspectRatio: 16 / 10, child: content),
     );
   }
 }
@@ -224,11 +259,28 @@ class _MetadataBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _MetaRow(label: 'Формат', value: item.format ?? '—'),
-        _MetaRow(
-          label: 'Размер',
-          value: '${item.width ?? '?'} × ${item.height ?? '?'}',
-        ),
+        if (item.isImage)
+          _MetaRow(
+            label: 'Размер',
+            value: '${item.width ?? '?'} × ${item.height ?? '?'}',
+          ),
+        if (item.isAudio && item.bpm != null)
+          _MetaRow(label: 'BPM', value: '${item.bpm}'),
         if (item.palette != null) _PaletteBlock(paletteJson: item.palette!),
+        if (item.isVideo || item.isAudio) ...[
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            icon: Icon(
+              item.isVideo
+                  ? Icons.play_circle_outline
+                  : Icons.headphones_outlined,
+              size: 18,
+            ),
+            label: const Text('Открыть системным плеером'),
+            onPressed: () =>
+                context.read<CollectionState>().openItemExternally(item),
+          ),
+        ],
       ],
     );
   }
@@ -265,36 +317,132 @@ class _MetaRow extends StatelessWidget {
   }
 }
 
-/// Отображение цветовой палитры.
-class _PaletteBlock extends StatelessWidget {
+/// Интерактивная палитра: клик по цвету показывает его HEX-код,
+/// который можно скопировать в буфер обмена.
+class _PaletteBlock extends StatefulWidget {
   const _PaletteBlock({required this.paletteJson});
 
   final String paletteJson;
 
   @override
+  State<_PaletteBlock> createState() => _PaletteBlockState();
+}
+
+class _PaletteBlockState extends State<_PaletteBlock> {
+  /// Выбранный цвет (индекс в списке) — под палитрой показывается его код.
+  int? _selectedIndex;
+
+  late List<Color> _colors;
+
+  @override
+  void initState() {
+    super.initState();
+    _colors = _parseColors(widget.paletteJson);
+  }
+
+  @override
+  void didUpdateWidget(_PaletteBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.paletteJson != widget.paletteJson) {
+      _colors = _parseColors(widget.paletteJson);
+      _selectedIndex = null;
+    }
+  }
+
+  /// HEX-код выбранного цвета в формате #RRGGBB.
+  String? get _selectedHex {
+    final idx = _selectedIndex;
+    if (idx == null || idx < 0 || idx >= _colors.length) return null;
+    final argb = _colors[idx].toARGB32() & 0xFFFFFF;
+    return argb.toRadixString(16).padLeft(6, '0').toUpperCase();
+  }
+
+  Future<void> _copyHex() async {
+    final hex = _selectedHex;
+    if (hex == null) return;
+    await Clipboard.setData(ClipboardData(text: '#$hex'));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Скопировано: #$hex'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final colors = _parseColors(paletteJson);
+    if (_colors.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final color in colors)
-            Container(
-              width: 24,
-              height: 24,
-              margin: const EdgeInsets.only(right: 4),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
+          Row(
+            children: [
+              for (var i = 0; i < _colors.length; i++)
+                _ColorSwatch(
+                  color: _colors[i],
+                  selected: _selectedIndex == i,
+                  hex: _hexOf(_colors[i]),
+                  onTap: () => setState(() {
+                    _selectedIndex = _selectedIndex == i ? null : i;
+                  }),
                 ),
+            ],
+          ),
+          // Код выбранного цвета + кнопка копирования.
+          if (_selectedHex != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: _colors[_selectedIndex!],
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '#$_selectedHex',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'Копировать код цвета',
+                    icon: const Icon(Icons.copy_outlined, size: 16),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _copyHex,
+                  ),
+                ],
               ),
             ),
+          ],
         ],
       ),
     );
+  }
+
+  String _hexOf(Color color) {
+    final argb = color.toARGB32() & 0xFFFFFF;
+    return argb.toRadixString(16).padLeft(6, '0').toUpperCase();
   }
 
   List<Color> _parseColors(String json) {
@@ -306,6 +454,148 @@ class _PaletteBlock extends StatelessWidget {
         .map((v) => Color(0xFF000000 | v))
         .toList();
     return list;
+  }
+}
+
+/// Кликабельный квадратик цвета с подсказкой HEX-кода.
+class _ColorSwatch extends StatelessWidget {
+  const _ColorSwatch({
+    required this.color,
+    required this.selected,
+    required this.hex,
+    required this.onTap,
+  });
+
+  final Color color;
+  final bool selected;
+  final String hex;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Tooltip(
+        message: '#$hex\nКликните, чтобы увидеть код',
+        waitDuration: const Duration(milliseconds: 400),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: selected
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.outlineVariant,
+                width: selected ? 2.5 : 1,
+              ),
+            ),
+            child: selected
+                ? const Icon(Icons.check, size: 14, color: Colors.white)
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Блок BPM для аудиофайлов: поле ввода + автоматический тег «BPM <n>».
+class _BpmBlock extends StatefulWidget {
+  const _BpmBlock({required this.item});
+
+  final CollectionItem item;
+
+  @override
+  State<_BpmBlock> createState() => _BpmBlockState();
+}
+
+class _BpmBlockState extends State<_BpmBlock> {
+  late final TextEditingController _controller;
+  int _lastItemId = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.item.bpm?.toString() ?? '',
+    );
+    _lastItemId = widget.item.id;
+  }
+
+  @override
+  void didUpdateWidget(_BpmBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.item.id != _lastItemId) {
+      _controller.text = widget.item.bpm?.toString() ?? '';
+      _lastItemId = widget.item.id;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save(String value) {
+    final parsed = int.tryParse(value.trim());
+    final state = context.read<CollectionState>();
+    state.setSelectedItemBpm(
+      parsed == null || parsed <= 0 ? null : parsed.clamp(1, 400),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('BPM', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(width: 6),
+            Tooltip(
+              message:
+                  'Ударов в минуту. Сохраняется автоматически и добавляется '
+                  'тег «BPM <значение>» — по нему можно фильтровать.',
+              child: Icon(
+                Icons.info_outline,
+                size: 14,
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  hintText: 'Например: 120',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: _save,
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.tonal(
+              onPressed: () => _save(_controller.text),
+              child: const Text('Сохранить'),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }
 
@@ -408,29 +698,42 @@ class _AddTagField extends StatefulWidget {
 
 class _AddTagFieldState extends State<_AddTagField> {
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
+  }
+
+  void _submit() {
+    final tag = _controller.text.trim();
+    if (tag.isNotEmpty) {
+      context.read<CollectionState>().addTagToSelectedItem(tag);
+      _controller.clear();
+      // Возвращаем фокус в поле — можно сразу ввести следующий тег.
+      _focusNode.requestFocus();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: _controller,
-      decoration: const InputDecoration(
-        labelText: 'Добавить тег',
+      focusNode: _focusNode,
+      decoration: InputDecoration(
+        labelText: 'Добавить тег (Enter или кнопка)',
         isDense: true,
-        prefixIcon: Icon(Icons.add, size: 18),
+        prefixIcon: const Icon(Icons.add, size: 18),
+        // Кнопка подтверждения — тег добавляется и мышью, без Enter.
+        suffixIcon: IconButton(
+          tooltip: 'Добавить тег',
+          icon: const Icon(Icons.check_circle_outline, size: 20),
+          onPressed: _submit,
+        ),
       ),
-      onSubmitted: (value) {
-        final tag = value.trim();
-        if (tag.isNotEmpty) {
-          context.read<CollectionState>().addTagToSelectedItem(tag);
-          _controller.clear();
-        }
-      },
+      onSubmitted: (_) => _submit(),
     );
   }
 }

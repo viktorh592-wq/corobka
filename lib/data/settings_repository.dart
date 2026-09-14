@@ -10,6 +10,8 @@ class SettingsRepository {
   static const _kRootPath = 'collection_root_path';
   static const _kSortMode = 'sort_mode';
   static const _kThumbnailExtent = 'thumbnail_extent';
+  static const _kLeftPanelWidth = 'left_panel_width';
+  static const _kRightPanelWidth = 'right_panel_width';
 
   /// Сохранение режима темы.
   Future<void> saveThemeMode(String mode) async {
@@ -69,5 +71,29 @@ class SettingsRepository {
   Future<double?> loadThumbnailExtent() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getDouble(_kThumbnailExtent);
+  }
+
+  /// Сохранение ширины левой панели.
+  Future<void> saveLeftPanelWidth(double width) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kLeftPanelWidth, width);
+  }
+
+  /// Чтение ширины левой панели. `null`, если не задана.
+  Future<double?> loadLeftPanelWidth() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_kLeftPanelWidth);
+  }
+
+  /// Сохранение ширины правой панели.
+  Future<void> saveRightPanelWidth(double width) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kRightPanelWidth, width);
+  }
+
+  /// Чтение ширины правой панели. `null`, если не задана.
+  Future<double?> loadRightPanelWidth() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_kRightPanelWidth);
   }
 }

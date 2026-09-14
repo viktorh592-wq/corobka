@@ -63,6 +63,7 @@ class CollectionState extends ChangeNotifier {
   List<Folder> _folders = const [];
   List<CollectionItem> _items = const [];
   List<Tag> _tags = const [];
+  Map<int, int> _tagCounts = const {};
   Map<int?, int> _folderCounts = const {};
 
   CollectionItem? _selectedItem;
@@ -123,6 +124,9 @@ class CollectionState extends ChangeNotifier {
 
   /// Список всех тегов коллекции.
   List<Tag> get tags => _tags;
+
+  /// Количество элементов для каждого тега (по id тега).
+  Map<int, int> get tagCounts => _tagCounts;
 
   /// Счётчики элементов по папкам (ключ `null` — элементы вне папок).
   Map<int?, int> get folderCounts => _folderCounts;
@@ -205,7 +209,7 @@ class CollectionState extends ChangeNotifier {
     notifyListeners();
 
     _folders = await _service.getFolders();
-    _tags = await _service.getTags();
+    await _loadTags();
     _folderCounts = await _service.countByFolder();
     _items = _applySort(await _loadItems());
     _isLoading = false;
@@ -434,14 +438,28 @@ class CollectionState extends ChangeNotifier {
 
   // ─────────────────────────── ТЕГИ ───────────────────────────
 
+  /// Публичная перезагрузка списка тегов из БД.
+  ///
+  /// Вызывается левой панелью при раскрытии раздела «Теги» — гарантирует
+  /// актуальные данные, даже если уведомление было пропущено.
+  Future<void> refreshTags() => _loadTagsAndNotify();
+
   /// Добавление тега к выбранному элементу.
+  ///
+  /// Ошибки не «глотаются»: они попадают в [lastError] и видны пользователю.
   Future<void> addTagToSelectedItem(String tagName) async {
     final item = _selectedItem;
-    if (item == null || tagName.trim().isEmpty) return;
+    final name = tagName.trim();
+    if (item == null || name.isEmpty) return;
 
-    await _service.addTagToItem(item.id, tagName);
-    await _reloadSelectedItemTags();
-    await _loadTagsAndNotify();
+    try {
+      await _service.addTagToItem(item.id, name);
+      await _loadTagsAndNotify();
+      await _reloadSelectedItemTags();
+    } catch (e) {
+      _lastError = 'Не удалось добавить тег: $e';
+      notifyListeners();
+    }
   }
 
   /// Удаление тега с выбранного элемента.
@@ -449,14 +467,25 @@ class CollectionState extends ChangeNotifier {
     final item = _selectedItem;
     if (item == null) return;
 
-    await _service.removeTagFromItem(item.id, tagId);
-    await _reloadSelectedItemTags();
-    // Если активен фильтр по этому тегу — обновляем список элементов.
-    if (_filterTagId == tagId) {
-      await _loadItemsAndNotify();
-    } else {
+    try {
+      await _service.removeTagFromItem(item.id, tagId);
       await _loadTagsAndNotify();
+      await _reloadSelectedItemTags();
+      // Если активен фильтр по этому тегу — обновляем список элементов.
+      if (_filterTagId == tagId) {
+        await _loadItemsAndNotify();
+      }
+    } catch (e) {
+      _lastError = 'Не удалось удалить тег: $e';
+      notifyListeners();
     }
+  }
+
+  /// Загрузка тегов и счётчиков их использования.
+  Future<void> _loadTags() async {
+    final pairs = await _service.getTagsWithCounts();
+    _tags = [for (final (tag, _) in pairs) tag];
+    _tagCounts = {for (final (tag, cnt) in pairs) tag.id: cnt};
   }
 
   Future<void> _reloadSelectedItemTags() async {
@@ -602,8 +631,57 @@ class CollectionState extends ChangeNotifier {
   }
 
   Future<void> _loadTagsAndNotify() async {
-    _tags = await _service.getTags();
+    await _loadTags();
     notifyListeners();
+  }
+
+  // ─────────────────────────── BPM ───────────────────────────
+
+  /// Установка BPM выбранного аудиофайла (null — сброс).
+  ///
+  /// Значение сохраняется и автоматически привязывается тег `BPM <n>`
+  /// (прежний BPM-тег снимается). Список тегов и элементы обновляются.
+  Future<void> setSelectedItemBpm(int? bpm) async {
+    final item = _selectedItem;
+    if (item == null) return;
+
+    try {
+      await _service.setItemBpm(item.id, bpm);
+      _selectedItem = item.copyWith(bpm: bpm, clearBpm: bpm == null);
+      notifyListeners();
+      await _loadTagsAndNotify();
+      await _reloadSelectedItemTags();
+    } catch (e) {
+      _lastError = 'Не удалось сохранить BPM: $e';
+      notifyListeners();
+    }
+  }
+
+  // ─────────────────────────── ДУБЛИКАТЫ ───────────────────────────
+
+  /// Поиск групп дубликатов (одинаковый хэш содержимого файла).
+  Future<List<List<CollectionItem>>> findDuplicates() async {
+    try {
+      // Сначала досчитываем хэши для старых элементов без хэша.
+      await _service.backfillHashes();
+      return await _service.getDuplicateGroups();
+    } catch (e) {
+      _lastError = 'Ошибка поиска дубликатов: $e';
+      notifyListeners();
+      return const [];
+    }
+  }
+
+  // ─────────────────────────── СИСТЕМНЫЙ ПЛЕЕР ───────────────────────────
+
+  /// Открытие файла системным проигрывателем (видео/аудио).
+  Future<void> openItemExternally(CollectionItem item) async {
+    try {
+      await _service.openWithSystemPlayer(item.path);
+    } catch (e) {
+      _lastError = 'Не удалось открыть файл: $e';
+      notifyListeners();
+    }
   }
 
   @override

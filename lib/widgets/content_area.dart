@@ -7,8 +7,10 @@ import 'package:provider/provider.dart';
 
 import '../data/models/item.dart';
 import '../features/collection/collection_state.dart';
+import 'duplicates_dialog.dart';
 import 'drop_zone.dart';
 import 'lightbox_viewer.dart';
+import 'media_placeholder.dart';
 
 /// Центральная область контента.
 ///
@@ -43,8 +45,7 @@ class ContentArea extends StatelessWidget {
         children: [
           _Toolbar(state: state),
           const Divider(height: 1),
-          if (state.isImporting)
-            const LinearProgressIndicator(minHeight: 2),
+          if (state.isImporting) const LinearProgressIndicator(minHeight: 2),
           Expanded(child: _ItemGrid()),
         ],
       ),
@@ -207,121 +208,157 @@ class _ToolbarState extends State<_Toolbar> {
 
     return Material(
       elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 200,
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Поиск...',
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  suffixIcon: state.searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.close, size: 16),
-                          onPressed: () {
-                            _searchController.clear();
-                            state.clearSearch();
-                          },
-                        )
-                      : null,
+      // Горизонтальный скролл: при узком окне (или широких боковых панелях)
+      // тулбар не переполняется, а прокручивается. IntrinsicWidth даёт Row
+      // фиксированную ширину (Spacer/Expanded остаются корректными), а при
+      // нехватке места содержимое прокручивается.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: IntrinsicWidth(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 200,
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Поиск...',
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            isDense: true,
+                            border: const OutlineInputBorder(),
+                            suffixIcon: state.searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.close, size: 16),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      state.clearSearch();
+                                    },
+                                  )
+                                : null,
+                          ),
+                          onChanged: _onSearchChanged,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: 'Фильтр по цвету',
+                        icon: const Icon(Icons.palette_outlined),
+                        onPressed: () => _showColorFilter(context),
+                      ),
+                      const SizedBox(width: 4),
+                      if (!isTrash) ...[
+                        TextButton.icon(
+                          onPressed: () => state.importFiles(),
+                          icon: const Icon(Icons.add_photo_alternate_outlined,
+                              size: 18),
+                          label: const Text('Импорт'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => state.importDirectory(),
+                          icon: const Icon(Icons.create_new_folder_outlined,
+                              size: 18),
+                          label: const Text('Папка'),
+                        ),
+                      ],
+                      IconButton(
+                        tooltip: 'Экспорт',
+                        icon: const Icon(Icons.download_outlined),
+                        onPressed: () => _export(context),
+                      ),
+                      IconButton(
+                        tooltip: 'Найти дубликаты',
+                        icon: const Icon(Icons.content_copy_outlined),
+                        onPressed: () => _showDuplicates(context),
+                      ),
+                      const Spacer(),
+                      if (isTrash && state.items.isNotEmpty) ...[
+                        TextButton.icon(
+                          onPressed: () => _confirmEmptyTrash(context, state),
+                          icon: const Icon(Icons.delete_forever_outlined,
+                              size: 18),
+                          label: const Text('Очистить корзину'),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      // Слайдер зума превью (как в Eagle).
+                      Icon(
+                        Icons.photo_size_select_small_outlined,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                      SizedBox(
+                        width: 90,
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 2,
+                            thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6),
+                            overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 10),
+                          ),
+                          child: Slider(
+                            value: state.thumbnailExtent,
+                            min: 120,
+                            max: 320,
+                            onChanged: (v) => state.setThumbnailExtent(v),
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.photo_size_select_large_outlined,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: state.sortMode.label,
+                        icon: const Icon(Icons.sort_outlined),
+                        onPressed: () => _pickSortMode(context),
+                      ),
+                      IconButton(
+                        tooltip: 'Сетка',
+                        icon: const Icon(Icons.grid_view_outlined),
+                        isSelected: state.viewMode == ViewMode.grid,
+                        onPressed: () => state.setViewMode(ViewMode.grid),
+                      ),
+                      IconButton(
+                        tooltip: 'Masonry',
+                        icon: const Icon(Icons.dashboard_outlined),
+                        isSelected: state.viewMode == ViewMode.masonry,
+                        onPressed: () => state.setViewMode(ViewMode.masonry),
+                      ),
+                      IconButton(
+                        tooltip: 'Список',
+                        icon: const Icon(Icons.view_list_outlined),
+                        isSelected: state.viewMode == ViewMode.list,
+                        onPressed: () => state.setViewMode(ViewMode.list),
+                      ),
+                    ],
+                  ),
                 ),
-                onChanged: _onSearchChanged,
               ),
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: 'Фильтр по цвету',
-              icon: const Icon(Icons.palette_outlined),
-              onPressed: () => _showColorFilter(context),
-            ),
-            const SizedBox(width: 4),
-            if (!isTrash) ...[
-              TextButton.icon(
-                onPressed: () => state.importFiles(),
-                icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
-                label: const Text('Импорт'),
-              ),
-              TextButton.icon(
-                onPressed: () => state.importDirectory(),
-                icon: const Icon(Icons.create_new_folder_outlined, size: 18),
-                label: const Text('Папка'),
-              ),
-            ],
-            IconButton(
-              tooltip: 'Экспорт',
-              icon: const Icon(Icons.download_outlined),
-              onPressed: () => _export(context),
-            ),
-            const Spacer(),
-            if (isTrash && state.items.isNotEmpty) ...[
-              TextButton.icon(
-                onPressed: () => _confirmEmptyTrash(context, state),
-                icon: const Icon(Icons.delete_forever_outlined, size: 18),
-                label: const Text('Очистить корзину'),
-              ),
-              const SizedBox(width: 8),
-            ],
-            // Слайдер зума превью (как в Eagle).
-            Icon(
-              Icons.photo_size_select_small_outlined,
-              size: 18,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            SizedBox(
-              width: 90,
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 2,
-                  thumbShape:
-                      const RoundSliderThumbShape(enabledThumbRadius: 6),
-                  overlayShape:
-                      const RoundSliderOverlayShape(overlayRadius: 10),
-                ),
-                child: Slider(
-                  value: state.thumbnailExtent,
-                  min: 120,
-                  max: 320,
-                  onChanged: (v) => state.setThumbnailExtent(v),
-                ),
-              ),
-            ),
-            Icon(
-              Icons.photo_size_select_large_outlined,
-              size: 18,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: state.sortMode.label,
-              icon: const Icon(Icons.sort_outlined),
-              onPressed: () => _pickSortMode(context),
-            ),
-            IconButton(
-              tooltip: 'Сетка',
-              icon: const Icon(Icons.grid_view_outlined),
-              isSelected: state.viewMode == ViewMode.grid,
-              onPressed: () => state.setViewMode(ViewMode.grid),
-            ),
-            IconButton(
-              tooltip: 'Masonry',
-              icon: const Icon(Icons.dashboard_outlined),
-              isSelected: state.viewMode == ViewMode.masonry,
-              onPressed: () => state.setViewMode(ViewMode.masonry),
-            ),
-            IconButton(
-              tooltip: 'Список',
-              icon: const Icon(Icons.view_list_outlined),
-              isSelected: state.viewMode == ViewMode.list,
-              onPressed: () => state.setViewMode(ViewMode.list),
-            ),
-          ],
-        ),
+          );
+        },
       ),
+    );
+  }
+
+  /// Диалог поиска дубликатов (по одинаковому содержимому файлов).
+  void _showDuplicates(BuildContext context) {
+    final state = widget.state;
+    showDialog<void>(
+      context: context,
+      builder: (context) => DuplicatesDialog(state: state),
     );
   }
 
@@ -447,8 +484,7 @@ class _MasonryView extends StatelessWidget {
     // Число колонок подстраивается под слайдер зума и ширину области.
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns =
-            (constraints.maxWidth / extent).round().clamp(2, 10);
+        final columns = (constraints.maxWidth / extent).round().clamp(2, 10);
         return MasonryGridView.count(
           padding: const EdgeInsets.all(12),
           crossAxisCount: columns,
@@ -522,15 +558,21 @@ class _ItemCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.file(
-                      File(item.path),
-                      fit: showFullImage ? BoxFit.contain : BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color:
-                            Theme.of(context).colorScheme.surfaceContainerHighest,
-                        child: const Icon(Icons.broken_image_outlined),
-                      ),
-                    ),
+                    // Видео/аудио не декодируются как изображения —
+                    // показываем понятный плейсхолдер.
+                    if (item.isImage)
+                      Image.file(
+                        File(item.path),
+                        fit: showFullImage ? BoxFit.contain : BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
+                          child: const Icon(Icons.broken_image_outlined),
+                        ),
+                      )
+                    else
+                      MediaPlaceholder(item: item),
                     if (item.isFavorite)
                       const Positioned(
                         top: 4,
@@ -562,6 +604,12 @@ class _ItemCard extends StatelessWidget {
   }
 
   void _openLightbox(BuildContext context, CollectionState state) {
+    // Видео и аудио открываются системным плеером (как в Eagle —
+    // внешний просмотрщик), а не полноэкранным просмотром картинок.
+    if (!item.isImage) {
+      state.openItemExternally(item);
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => LightboxViewer(
@@ -604,7 +652,8 @@ class _ItemCard extends StatelessWidget {
               leading: Icon(
                 item.isFavorite ? Icons.star_border : Icons.star,
               ),
-              title: Text(item.isFavorite ? 'Убрать из избранного' : 'В избранное'),
+              title: Text(
+                  item.isFavorite ? 'Убрать из избранного' : 'В избранное'),
             ),
           ),
         if (!isTrash)
@@ -746,14 +795,19 @@ class _ItemListRow extends StatelessWidget {
               child: SizedBox(
                 width: 56,
                 height: 56,
-                child: Image.file(
-                  File(item.path),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    child: const Icon(Icons.broken_image_outlined, size: 20),
-                  ),
-                ),
+                child: item.isImage
+                    ? Image.file(
+                        File(item.path),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
+                          child:
+                              const Icon(Icons.broken_image_outlined, size: 20),
+                        ),
+                      )
+                    : MediaPlaceholder(item: item),
               ),
             ),
             const SizedBox(width: 12),

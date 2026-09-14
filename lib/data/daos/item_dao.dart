@@ -133,6 +133,74 @@ class ItemDao {
     return db.delete('items', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Обновление SHA-256 хэша элемента (для поиска дубликатов).
+  Future<int> updateHash(int id, String? hash) async {
+    final db = await _db;
+    return db.update(
+      'items',
+      {'hash': hash},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Обновление BPM аудиофайла (null — сбросить).
+  Future<int> updateBpm(int id, int? bpm) async {
+    final db = await _db;
+    return db.update(
+      'items',
+      {'bpm': bpm},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Группы дубликатов: элементы с одинаковым хэшем содержимого.
+  /// Возвращает список групп (в группе минимум 2 элемента).
+  Future<List<List<CollectionItem>>> getDuplicateGroups() async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT * FROM items
+      WHERE deleted_at IS NULL AND hash IS NOT NULL
+        AND hash IN (
+          SELECT hash FROM items
+          WHERE deleted_at IS NULL AND hash IS NOT NULL
+          GROUP BY hash
+          HAVING COUNT(*) > 1
+        )
+      ORDER BY hash, created_at ASC
+    ''');
+
+    final items = rows.map(CollectionItem.fromMap).toList();
+    final groups = <List<CollectionItem>>[];
+    String? currentHash;
+    var hasCurrent = false;
+    var currentGroup = <CollectionItem>[];
+    for (final item in items) {
+      if (!hasCurrent || item.hash != currentHash) {
+        if (currentGroup.length > 1) groups.add(currentGroup);
+        currentHash = item.hash;
+        hasCurrent = true;
+        currentGroup = [item];
+      } else {
+        currentGroup.add(item);
+      }
+    }
+    if (currentGroup.length > 1) groups.add(currentGroup);
+    return groups;
+  }
+
+  /// Элементы без вычисленного хэша (для обратного заполнения).
+  Future<List<CollectionItem>> getWithoutHash({int limit = 500}) async {
+    final db = await _db;
+    final rows = await db.query(
+      'items',
+      where: 'deleted_at IS NULL AND hash IS NULL',
+      limit: limit,
+    );
+    return rows.map(CollectionItem.fromMap).toList();
+  }
+
   /// Поиск элементов по фильтру.
   ///
   /// SQL применяется для фильтров по папке, избранному, формату, дате,

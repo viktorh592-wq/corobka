@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -166,11 +167,19 @@ class CollectionService {
     final targetPath =
         await _imageService.copyToDirectory(sourcePath, imagesDir);
 
+    final isMedia =
+        _imageService.isVideo(targetPath) || _imageService.isAudio(targetPath);
+
     // Метаданные извлекаем в фоновом изоляте — UI не «замирает»
     // при импорте больших изображений.
     final metadata =
         await _metadataService.extractMetadataInBackground(targetPath);
-    final palette = await _paletteService.extractPalette(targetPath);
+    final palette =
+        isMedia ? null : await _paletteService.extractPalette(targetPath);
+
+    // SHA-256 хэш содержимого — для поиска дубликатов. Считаем в изоляте,
+    // чтобы большие файлы не блокировали UI.
+    final hash = await compute(_hashFileSync, targetPath);
 
     final title = targetPath.split(Platform.pathSeparator).last;
 
@@ -186,10 +195,21 @@ class CollectionService {
       notes: null,
       isFavorite: false,
       createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      hash: hash,
     );
 
     final id = await _itemDao.insert(item);
     return _copyWithId(item, id);
+  }
+
+  /// Синхронное вычисление SHA-256 файла (исполняется в изоляте).
+  static String? _hashFileSync(String path) {
+    try {
+      final bytes = File(path).readAsBytesSync();
+      return sha256.convert(bytes).toString();
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<int> updateItemAnnotations(
@@ -209,6 +229,9 @@ class CollectionService {
 
   Future<List<Tag>> getTags() => _tagDao.getAll();
 
+  /// Теги с количеством связанных элементов.
+  Future<List<(Tag, int)>> getTagsWithCounts() => _tagDao.getAllWithCounts();
+
   Future<List<Tag>> getTagsForItem(int itemId) =>
       _tagDao.getTagsForItem(itemId);
 
@@ -219,6 +242,48 @@ class CollectionService {
 
   Future<void> removeTagFromItem(int itemId, int tagId) =>
       _tagDao.detachTagFromItem(itemId, tagId);
+
+  /// Установка BPM аудиофайла с автоматическим тегом `BPM <значение>`.
+  ///
+  /// Предыдущий BPM-тег элемента удаляется, новый привязывается.
+  /// `bpm == null` — сброс значения и тега.
+  Future<void> setItemBpm(int itemId, int? bpm) async {
+    await _itemDao.updateBpm(itemId, bpm);
+
+    // Удаляем прежние BPM-теги этого элемента.
+    final currentTags = await _tagDao.getTagsForItem(itemId);
+    for (final tag in currentTags) {
+      if (tag.name.toUpperCase().startsWith('BPM ')) {
+        await _tagDao.detachTagFromItem(itemId, tag.id);
+      }
+    }
+
+    if (bpm != null) {
+      final tagId = await _tagDao.ensureTag('BPM $bpm');
+      await _tagDao.attachTagToItem(itemId, tagId);
+    }
+  }
+
+  // ─────────── ДУБЛИКАТЫ ───────────
+
+  /// Группы дубликатов (одинаковый хэш содержимого файла).
+  Future<List<List<CollectionItem>>> getDuplicateGroups() =>
+      _itemDao.getDuplicateGroups();
+
+  /// Обратное заполнение хэшей для элементов, импортированных раньше
+  /// появления функции дубликатов. Возвращает число обновлённых записей.
+  Future<int> backfillHashes() async {
+    final pending = await _itemDao.getWithoutHash();
+    var updated = 0;
+    for (final item in pending) {
+      final hash = await compute(_hashFileSync, item.path);
+      if (hash != null) {
+        await _itemDao.updateHash(item.id, hash);
+        updated++;
+      }
+    }
+    return updated;
+  }
 
   // ─────────── ПОИСК ───────────
 
@@ -248,6 +313,24 @@ class CollectionService {
     );
   }
 
+  // ─────────── СИСТЕМНЫЙ ПЛЕЕР ───────────
+
+  /// Открытие файла системным проигрывателем (видео/аудио и др.).
+  Future<void> openWithSystemPlayer(String path) async {
+    try {
+      if (Platform.isWindows) {
+        await Process.run('cmd', ['/c', 'start', '', path]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [path]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [path]);
+      }
+    } catch (e) {
+      debugPrint('openWithSystemPlayer error: $e');
+      rethrow;
+    }
+  }
+
   // ─────────── ВСПОМОГАТЕЛЬНОЕ ───────────
 
   CollectionItem _copyWithId(CollectionItem item, int id) {
@@ -263,6 +346,8 @@ class CollectionService {
       notes: item.notes,
       isFavorite: item.isFavorite,
       createdAt: item.createdAt,
+      hash: item.hash,
+      bpm: item.bpm,
     );
   }
 
