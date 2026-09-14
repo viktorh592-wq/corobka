@@ -806,7 +806,11 @@ class _NotesEditorState extends State<_NotesEditor> {
         TextField(
           controller: _controller,
           focusNode: _focusNode,
-          maxLines: 6,
+          // Авто-расширение поля вниз при заполнении текстом.
+          // minLines — стартовая высота; maxLines: null позволяет расти
+          // неограниченно по мере ввода.
+          minLines: 6,
+          maxLines: null,
           decoration: const InputDecoration(
             hintText: 'Добавьте заметку...',
             border: OutlineInputBorder(),

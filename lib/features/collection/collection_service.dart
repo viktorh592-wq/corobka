@@ -95,10 +95,26 @@ class CollectionService {
 
   Future<List<Folder>> getFolders() => _folderDao.getAll();
 
-  Future<int> createFolder(String name) => _folderDao.insert(
+  /// Прямые дочерние папки указанного родителя (null = корневые).
+  Future<List<Folder>> getSubfolders(int? parentId) =>
+      _folderDao.getChildren(parentId);
+
+  Future<int> createFolder(String name, {int? parentId}) => _folderDao.insert(
         Folder(
           id: 0,
           name: name,
+          parentId: parentId,
+          createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        ),
+      );
+
+  /// Создание подпапки внутри указанного родителя.
+  Future<int> createSubfolder(String name, int parentId) =>
+      _folderDao.insert(
+        Folder(
+          id: 0,
+          name: name,
+          parentId: parentId,
           createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
         ),
       );
@@ -296,6 +312,8 @@ class CollectionService {
     int? createdBefore,
     int? createdAfter,
     String? paletteColor,
+    String? paletteColorSimilar,
+    double colorTolerance = 0.15,
   }) {
     return _search.search(
       query: query,
@@ -310,6 +328,8 @@ class CollectionService {
           ? null
           : DateTime.fromMillisecondsSinceEpoch(createdAfter * 1000),
       paletteColor: paletteColor,
+      paletteColorSimilar: paletteColorSimilar,
+      colorTolerance: colorTolerance,
     );
   }
 

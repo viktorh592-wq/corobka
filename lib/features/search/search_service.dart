@@ -20,6 +20,8 @@ class SearchService {
     DateTime? before,
     DateTime? after,
     String? paletteColor,
+    String? paletteColorSimilar,
+    double colorTolerance = 0.15,
   }) {
     return _itemDao.search(
       ItemFilter(
@@ -33,6 +35,8 @@ class SearchService {
         createdAfter:
             after == null ? null : after.millisecondsSinceEpoch ~/ 1000,
         paletteColor: paletteColor,
+        paletteColorSimilar: paletteColorSimilar,
+        colorTolerance: colorTolerance,
       ),
     );
   }

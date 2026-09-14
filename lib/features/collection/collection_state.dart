@@ -2,13 +2,11 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/models/folder.dart';
 import '../../data/models/item.dart';
-import '../../data/models/smart_folder.dart';
 import '../../data/models/tag.dart';
 import '../../data/settings_repository.dart';
 import '../images/export_service.dart';
 import '../images/import_controller.dart';
 import 'collection_service.dart';
-import 'smart_folder_service.dart';
 
 /// Режимы просмотра коллекции.
 enum ViewMode { grid, list, masonry }
@@ -29,8 +27,8 @@ enum SortMode {
 ///
 /// Хранит выбранную папку, режим просмотра, поисковый запрос, фильтры
 /// и загруженные данные коллекции. Обеспечивает импорт, управление
-/// папками/тегами, избранное, аннотации, корзину, поиск, фильтрацию,
-/// умные папки и экспорт.
+/// папками/тегами (с иерархией подпапок), избранное, аннотации, корзину,
+/// поиск, фильтрацию и экспорт.
 class CollectionState extends ChangeNotifier {
   CollectionState({
     CollectionService? service,
@@ -46,7 +44,6 @@ class CollectionState extends ChangeNotifier {
 
   final CollectionService _service;
   final SettingsRepository _settings;
-  final SmartFolderService _smartFolders = const SmartFolderService();
   late final ImportController _importController;
 
   /// Реакция на прогресс импорта (уведомляем UI о ходе копирования).
@@ -56,6 +53,7 @@ class CollectionState extends ChangeNotifier {
   ViewMode _viewMode = ViewMode.grid;
   String _searchQuery = '';
   String? _filterColor;
+  double _filterColorTolerance = 0.15;
   int? _filterTagId;
   SortMode _sortMode = SortMode.dateDesc;
   double _thumbnailExtent = 200;
@@ -106,6 +104,10 @@ class CollectionState extends ChangeNotifier {
 
   /// Выбранный цвет для фильтрации палитры.
   String? get filterColor => _filterColor;
+
+  /// Допустимое расстояние до выбранного цвета (0 = точное совпадение,
+  /// 1 = любые цвета). По умолчанию 0.15 — «похожий оттенок».
+  double get filterColorTolerance => _filterColorTolerance;
 
   /// Выбранный тег для фильтрации.
   int? get filterTagId => _filterTagId;
@@ -229,7 +231,10 @@ class CollectionState extends ChangeNotifier {
         query: _searchQuery,
         folderId: folderId,
         favoritesOnly: favorites,
-        paletteColor: _filterColor,
+        // Поиск по цвету использует новый путь с похожими оттенками:
+        // вычисляется RGB-расстояние до цветов палитры элемента.
+        paletteColorSimilar: _filterColor,
+        colorTolerance: _filterColorTolerance,
         tagIds: _filterTagId == null ? null : [_filterTagId!],
       );
     }
@@ -288,9 +293,18 @@ class CollectionState extends ChangeNotifier {
   Future<void> clearSearch() => setSearchQuery('');
 
   /// Установка фильтра по цвету палитры.
-  Future<void> setColorFilter(String colorHex) async {
-    if (colorHex == _filterColor) return;
+  ///
+  /// [tolerance] — допустимое нормализованное RGB-расстояние (0 = точное
+  /// совпадение, 1 = любые цвета). По умолчанию 0.15 — «похожий оттенок».
+  /// Используется новый путь поиска с вычислением расстояния между целевым
+  /// цветом и цветами палитры каждого элемента.
+  Future<void> setColorFilter(
+    String colorHex, {
+    double tolerance = 0.15,
+  }) async {
+    if (colorHex == _filterColor && tolerance == _filterColorTolerance) return;
     _filterColor = colorHex;
+    _filterColorTolerance = tolerance;
     notifyListeners();
     await _loadItemsAndNotify();
   }
@@ -299,6 +313,7 @@ class CollectionState extends ChangeNotifier {
   Future<void> clearColorFilter() async {
     if (_filterColor == null) return;
     _filterColor = null;
+    _filterColorTolerance = 0.15;
     notifyListeners();
     await _loadItemsAndNotify();
   }
@@ -372,10 +387,23 @@ class CollectionState extends ChangeNotifier {
 
   // ─────────────────────────── ПАПКИ ───────────────────────────
 
-  /// Создание новой папки.
+  /// Создание новой корневой папки.
   Future<void> createFolder(String name) async {
     await _service.createFolder(name);
     await _load();
+  }
+
+  /// Создание подпапки внутри указанного родителя.
+  /// Иерархия поддерживается через parent_id (см. Folder, FolderDao).
+  Future<void> createSubfolder(String name, int parentId) async {
+    await _service.createSubfolder(name, parentId);
+    await _load();
+  }
+
+  /// Список дочерних папок для заданного родителя.
+  /// `parentId == null` возвращает корневые папки.
+  List<Folder> subfoldersOf(int? parentId) {
+    return _folders.where((f) => f.parentId == parentId).toList();
   }
 
   /// Переименование папки.
@@ -385,7 +413,8 @@ class CollectionState extends ChangeNotifier {
   }
 
   /// Удаление папки (элементы остаются в коллекции, но без папки —
-  /// как в Eagle, где папка — лишь метка организации).
+  /// как в Eagle, где папка — лишь метка организации). Дочерние подпапки
+  /// поднимаются на уровень удаляемой (наследуют её parent_id).
   Future<void> deleteFolder(int id) async {
     await _service.deleteFolder(id);
     if (_selectedFolderId == id.toString()) {
@@ -547,15 +576,6 @@ class CollectionState extends ChangeNotifier {
     _selectedItemTags = const [];
     await _load();
   }
-
-  // ─────────────────────────── УМНЫЕ ПАПКИ ───────────────────────────
-
-  /// Список доступных умных папок.
-  List<SmartFolder> getSmartFolders() => _smartFolders.getSmartFolders();
-
-  /// Получение элементов, попадающих в умную папку.
-  Future<List<CollectionItem>> getSmartFolderItems(SmartFolder folder) =>
-      _smartFolders.getItemsFor(folder);
 
   // ─────────────────────────── ИМПОРТ ───────────────────────────
 

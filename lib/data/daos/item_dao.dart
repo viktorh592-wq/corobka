@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
+import 'dart:math' as math;
 
 import '../app_database.dart';
 import '../models/item.dart';
@@ -279,8 +282,73 @@ class ItemDao {
       }).toList();
     }
 
+    // Поиск по кастомному цвету + похожим оттенкам.
+    // SQL LIKE не подходит — нужно вычислять расстояние в RGB
+    // между целевым цветом и каждым цветом палитры элемента.
+    if (filter.paletteColorSimilar != null) {
+      final target = _parseHex(filter.paletteColorSimilar!);
+      if (target != null) {
+        final tol = filter.colorTolerance.clamp(0.0, 1.0);
+        items = items.where((e) => _paletteMatches(e, target, tol)).toList();
+      }
+    }
+
     return items;
   }
+
+  /// Проверяет, есть ли в палитре элемента цвет, близкий к целевому.
+  ///
+  /// Палитра хранится как JSON-массив строк вида `["RRGGBB", ...]`.
+  /// Расстояние — нормализованное Евклидово в RGB (0 = точно совпадает,
+  /// 1 = максимально удалённые цвета). Считается от ближайшего цвета палитры.
+  static bool _paletteMatches(CollectionItem item, _Rgb target, double tol) {
+    final palette = item.palette;
+    if (palette == null || palette.isEmpty) return false;
+    try {
+      final decoded = jsonDecode(palette);
+      if (decoded is! List) return false;
+      for (final raw in decoded) {
+        if (raw is! String) continue;
+        final c = _parseHex(raw);
+        if (c == null) continue;
+        if (_distance(target, c) <= tol) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Евклидово расстояние между двумя цветами в нормированном RGB-кубе.
+  /// Возвращает значение от 0 (одинаковые цвета) до 1 (максимально разные).
+  static double _distance(_Rgb a, _Rgb b) {
+    final dr = (a.r - b.r).toDouble();
+    final dg = (a.g - b.g).toDouble();
+    final db = (a.b - b.b).toDouble();
+    // Максимальное расстояние в RGB-кубе со стороной 255 = sqrt(3 * 255^2) ≈ 441.673.
+    const maxDist = 441.67303395087074;
+    return math.sqrt(dr * dr + dg * dg + db * db) / maxDist;
+  }
+
+  /// Разбор строки вида `"RRGGBB"`, `"#RRGGBB"` или `"#RGB"`.
+  /// Возвращает null, если строка не похожа на HEX-цвет.
+  static _Rgb? _parseHex(String input) {
+    var s = input.trim().toUpperCase();
+    if (s.startsWith('#')) s = s.substring(1);
+    if (s.length == 3) {
+      s = s.split('').map((c) => '$c$c').join();
+    }
+    if (s.length != 6) return null;
+    final v = int.tryParse(s, radix: 16);
+    if (v == null) return null;
+    return _Rgb((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
+  }
+}
+
+/// RGB-цвет в виде трёх байтовых компонент.
+class _Rgb {
+  const _Rgb(this.r, this.g, this.b);
+  final int r, g, b;
 }
 
 /// Фильтр для поиска элементов коллекции.
@@ -294,6 +362,8 @@ class ItemFilter {
     this.createdBefore,
     this.createdAfter,
     this.paletteColor,
+    this.paletteColorSimilar,
+    this.colorTolerance = 0.15,
     this.includeTrashed = false,
   });
 
@@ -305,6 +375,16 @@ class ItemFilter {
   final int? createdBefore;
   final int? createdAfter;
   final String? paletteColor;
+
+  /// Поиск по кастомному цвету и похожим оттенкам.
+  /// HEX-строка (`RRGGBB`, `#RRGGBB`, `RGB`). Использует расстояние в RGB
+  /// к каждому цвету палитры элемента; если хотя бы один цвет попадает
+  /// в [colorTolerance], элемент включается в результат.
+  final String? paletteColorSimilar;
+
+  /// Допустимое нормализованное расстояние (0 = точное совпадение,
+  /// 1 = любые цвета). По умолчанию 0.15 — «похожий оттенок».
+  final double colorTolerance;
 
   /// Включать ли элементы из корзины в результат поиска.
   final bool includeTrashed;

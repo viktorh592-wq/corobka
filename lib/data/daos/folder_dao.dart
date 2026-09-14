@@ -4,6 +4,11 @@ import '../app_database.dart';
 import '../models/folder.dart';
 
 /// Объект доступа к данным папок (таблица `folders`).
+///
+/// Папки образуют иерархию через поле `parent_id` (null = корневая).
+/// Удаление папки не затрагивает элементы (они остаются в коллекции),
+/// но дочерние подпапки «поднимаются» на уровень удаляемой (их parent_id
+/// становится равным parent_id удаляемой).
 class FolderDao {
   const FolderDao();
 
@@ -15,10 +20,25 @@ class FolderDao {
     return db.insert('folders', folder.toMap());
   }
 
-  /// Получение всех папок.
+  /// Получение всех папок (плоский список).
   Future<List<Folder>> getAll() async {
     final db = await _db;
     final rows = await db.query('folders', orderBy: 'name');
+    return rows.map(Folder.fromMap).toList();
+  }
+
+  /// Получение прямых дочерних папок указанного родителя.
+  /// `parentId == null` возвращает корневые папки.
+  Future<List<Folder>> getChildren(int? parentId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'folders',
+      where: parentId == null
+          ? 'parent_id IS NULL'
+          : 'parent_id = ?',
+      whereArgs: parentId == null ? null : [parentId],
+      orderBy: 'name',
+    );
     return rows.map(Folder.fromMap).toList();
   }
 
@@ -45,9 +65,30 @@ class FolderDao {
     );
   }
 
-  /// Удаление папки.
-  Future<int> delete(int id) async {
+  /// Перемещение папки под нового родителя (null — в корень).
+  Future<int> moveToParent(int id, int? parentId) async {
     final db = await _db;
+    return db.update(
+      'folders',
+      {'parent_id': parentId},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Удаление папки. Дочерние подпапки поднимаются на уровень удаляемой
+  /// (наследуют её parent_id), чтобы не потеряться в иерархии.
+  Future<int> delete(int id, {int? newParentId}) async {
+    final db = await _db;
+    final folder = await getById(id);
+    final inheritParent = newParentId ?? folder?.parentId;
+    // Переподчиняем дочерние папки, чтобы они не остались «висящими».
+    await db.update(
+      'folders',
+      {'parent_id': inheritParent},
+      where: 'parent_id = ?',
+      whereArgs: [id],
+    );
     return db.delete('folders', where: 'id = ?', whereArgs: [id]);
   }
 }

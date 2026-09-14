@@ -3,15 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models/folder.dart';
-import '../data/models/smart_folder.dart';
 import '../features/collection/collection_state.dart';
 
 /// Левая панель навигации по коллекции.
 ///
-/// Отображает системные разделы (Все, Избранное, Теги, Корзина),
-/// пользовательские папки со счётчиками и умные папки. Поддерживает
-/// создание, переименование и удаление пользовательских папок,
-/// фильтрацию по тегам.
+/// Отображает системные разделы (Все, Избранное, Теги, Корзина) и
+/// пользовательские папки со счётчиками. Папки образуют иерархию —
+/// внутри любой папки можно создавать подпапки (рекурсивно). Поддерживает
+/// создание, переименование, удаление папок и фильтрацию по тегам.
 class LeftPanel extends StatelessWidget {
   const LeftPanel({super.key});
 
@@ -21,6 +20,10 @@ class LeftPanel extends StatelessWidget {
     final colors = Theme.of(context).extension<PanelColors>() ??
         PanelColors.fallback(Theme.of(context).brightness);
     final state = context.watch<CollectionState>();
+
+    // Корневые папки (parent_id IS NULL) раскрываются рекурсивно через
+    // _FolderTile, который сам рендерит свои подпапки.
+    final rootFolders = state.subfoldersOf(null);
 
     return Material(
       color: colors.panel,
@@ -46,7 +49,8 @@ class LeftPanel extends StatelessWidget {
             child: Row(
               children: [
                 const Expanded(
-                  child: Text('Папки', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: Text('Папки',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
                 IconButton(
                   tooltip: 'Создать папку',
@@ -56,21 +60,8 @@ class LeftPanel extends StatelessWidget {
               ],
             ),
           ),
-          for (final folder in state.folders)
-            _FolderTile(folder: folder),
-          const Divider(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Text(
-              'Умные папки',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
-                    letterSpacing: 1.2,
-                  ),
-            ),
-          ),
-          for (final smart in state.getSmartFolders())
-            _SmartFolderTile(smartFolder: smart),
+          for (final folder in rootFolders)
+            _FolderTile(folder: folder, level: 0),
           const Divider(),
           const _SystemTile(
             id: 'trash',
@@ -92,7 +83,8 @@ class LeftPanel extends StatelessWidget {
     );
   }
 
-  Future<void> _createFolderDialog(BuildContext context, CollectionState state) async {
+  Future<void> _createFolderDialog(
+      BuildContext context, CollectionState state) async {
     final nameController = TextEditingController();
     final name = await showDialog<String>(
       context: context,
@@ -149,8 +141,7 @@ class _TagsSectionState extends State<_TagsSection> {
           leading: const Icon(Icons.tag, size: 20),
           title: const Text('Теги'),
           selected: state.filterTagId != null && !_expanded,
-          selectedTileColor:
-              Theme.of(context).colorScheme.secondaryContainer,
+          selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -278,40 +269,90 @@ class _SystemTile extends StatelessWidget {
   }
 }
 
-/// Пользовательская папка с контекстным меню и счётчиком.
-class _FolderTile extends StatelessWidget {
-  const _FolderTile({required this.folder});
+/// Пользовательская папка с контекстным меню, счётчиком и поддержкой
+/// иерархии подпапок. [level] — уровень вложенности (0 = корневая),
+/// используется для визуального отступа слева.
+class _FolderTile extends StatefulWidget {
+  const _FolderTile({required this.folder, required this.level});
 
   final Folder folder;
+  final int level;
+
+  @override
+  State<_FolderTile> createState() => _FolderTileState();
+}
+
+class _FolderTileState extends State<_FolderTile> {
+  /// Раскрыта ли папка (видны ли её подпапки). По умолчанию collapsed.
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<CollectionState>();
-    final selected = state.selectedFolderId == folder.id.toString();
-    final count = state.folderCounts[folder.id];
+    final selected = state.selectedFolderId == widget.folder.id.toString();
+    final count = state.folderCounts[widget.folder.id];
+    final children = state.subfoldersOf(widget.folder.id);
+    final hasChildren = children.isNotEmpty;
 
-    return GestureDetector(
-      onSecondaryTapUp: (details) => _showMenu(context, state),
-      child: ListTile(
-        dense: true,
-        leading: const Icon(Icons.folder_outlined, size: 20),
-        title: Text(folder.name),
-        trailing: count != null && count > 0
-            ? Text(
-                '$count',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-              )
-            : null,
-        selected: selected,
-        selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
-        onTap: () => state.selectFolder(folder.id.toString()),
-        onLongPress: () => _showMenu(context, state),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Сама плитка папки.
+        GestureDetector(
+          onSecondaryTapUp: (details) => _showMenu(context, state),
+          child: Padding(
+            padding: EdgeInsets.only(left: widget.level * 12.0),
+            child: ListTile(
+              dense: true,
+              leading: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Шеврон раскрытия: виден только если есть дочерние папки.
+                  if (hasChildren)
+                    InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => setState(() => _expanded = !_expanded),
+                      child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: Icon(
+                          _expanded
+                              ? Icons.expand_more
+                              : Icons.chevron_right,
+                          size: 18,
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox(width: 22),
+                  const Icon(Icons.folder_outlined, size: 20),
+                ],
+              ),
+              title: Text(widget.folder.name),
+              trailing: count != null && count > 0
+                  ? Text(
+                      '$count',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                    )
+                  : null,
+              selected: selected,
+              selectedTileColor:
+                  Theme.of(context).colorScheme.secondaryContainer,
+              onTap: () => state.selectFolder(widget.folder.id.toString()),
+              onLongPress: () => _showMenu(context, state),
+            ),
+          ),
+        ),
+        // Дочерние подпапки (рекурсивно).
+        if (_expanded && hasChildren)
+          for (final child in children)
+            _FolderTile(folder: child, level: widget.level + 1),
+      ],
     );
   }
 
+  /// Контекстное меню: создание подпапки, переименование, удаление.
   Future<void> _showMenu(BuildContext context, CollectionState state) async {
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -319,6 +360,11 @@ class _FolderTile extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              leading: const Icon(Icons.create_new_folder_outlined),
+              title: const Text('Добавить подпапку'),
+              onTap: () => Navigator.pop(context, 'add_subfolder'),
+            ),
             ListTile(
               leading: const Icon(Icons.drive_file_rename_outline),
               title: const Text('Переименовать'),
@@ -334,7 +380,12 @@ class _FolderTile extends StatelessWidget {
       ),
     );
 
-    if (action == 'rename') {
+    if (action == 'add_subfolder') {
+      if (!context.mounted) return;
+      // Автоматически раскрываем родителя — чтобы новая подпапка была видна.
+      setState(() => _expanded = true);
+      await _createSubfolderDialog(context, state);
+    } else if (action == 'rename') {
       if (!context.mounted) return;
       await _renameDialog(context, state);
     } else if (action == 'delete') {
@@ -343,8 +394,45 @@ class _FolderTile extends StatelessWidget {
     }
   }
 
-  Future<void> _renameDialog(BuildContext context, CollectionState state) async {
-    final nameController = TextEditingController(text: folder.name);
+  /// Диалог создания подпапки внутри текущей папки.
+  Future<void> _createSubfolderDialog(
+    BuildContext context,
+    CollectionState state,
+  ) async {
+    final nameController = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Подпапка в «${widget.folder.name}»'),
+        content: TextField(
+          controller: nameController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Название подпапки',
+            hintText: 'Например: Иконки',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, nameController.text),
+            child: const Text('Создать'),
+          ),
+        ],
+      ),
+    );
+
+    if (name != null && name.trim().isNotEmpty) {
+      await state.createSubfolder(name.trim(), widget.folder.id);
+    }
+  }
+
+  Future<void> _renameDialog(
+      BuildContext context, CollectionState state) async {
+    final nameController = TextEditingController(text: widget.folder.name);
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -367,18 +455,20 @@ class _FolderTile extends StatelessWidget {
     );
 
     if (name != null && name.trim().isNotEmpty) {
-      await state.renameFolder(folder.id, name.trim());
+      await state.renameFolder(widget.folder.id, name.trim());
     }
   }
 
-  Future<void> _deleteDialog(BuildContext context, CollectionState state) async {
+  Future<void> _deleteDialog(
+      BuildContext context, CollectionState state) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Удалить папку?'),
         content: Text(
-          'Папка «${folder.name}» будет удалена. Элементы не удаляются — '
-          'они останутся в коллекции без папки.',
+          'Папка «${widget.folder.name}» будет удалена. Элементы не удаляются — '
+          'они останутся в коллекции без папки. Подпапки поднимутся '
+          'на уровень выше.',
         ),
         actions: [
           TextButton(
@@ -397,81 +487,7 @@ class _FolderTile extends StatelessWidget {
     );
 
     if (confirmed == true) {
-      await state.deleteFolder(folder.id);
+      await state.deleteFolder(widget.folder.id);
     }
-  }
-}
-
-/// Плитка умной папки.
-class _SmartFolderTile extends StatelessWidget {
-  const _SmartFolderTile({required this.smartFolder});
-
-  final SmartFolder smartFolder;
-
-  @override
-  Widget build(BuildContext context) {
-    final state = context.read<CollectionState>();
-
-    return ListTile(
-      dense: true,
-      leading: const Icon(Icons.auto_awesome_outlined, size: 20),
-      title: Text(smartFolder.name),
-      subtitle: Text(
-        _ruleDescription(smartFolder),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-      onTap: () => _showItems(context, state),
-    );
-  }
-
-  /// Краткое описание правила умной папки.
-  String _ruleDescription(SmartFolder folder) {
-    final parts = <String>[
-      if (folder.format != null) 'формат: ${folder.format}',
-      if (folder.paletteColor != null) 'цвет: #${folder.paletteColor}',
-      if (folder.tagNames != null) 'теги: ${folder.tagNames!.join(', ')}',
-    ];
-    return parts.isEmpty ? 'автоматическая' : parts.join(', ');
-  }
-
-  /// Показ элементов умной папки в диалоге.
-  Future<void> _showItems(BuildContext context, CollectionState state) async {
-    final items = await state.getSmartFolderItems(smartFolder);
-
-    if (!context.mounted) return;
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${smartFolder.name} (${items.length})'),
-        content: SizedBox(
-          width: 300,
-          child: items.isEmpty
-              ? const Text('Нет подходящих элементов')
-              : ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final item in items)
-                      ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.image_outlined),
-                        title: Text(item.title),
-                        subtitle: Text(
-                          '${item.width ?? '?'} × ${item.height ?? '?'}'
-                          ' · ${item.format ?? ''}',
-                        ),
-                      ),
-                  ],
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть'),
-          ),
-        ],
-      ),
-    );
   }
 }
