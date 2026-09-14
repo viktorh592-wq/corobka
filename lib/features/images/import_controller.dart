@@ -2,8 +2,6 @@ import 'package:flutter/foundation.dart';
 
 import '../collection/collection_service.dart';
 import 'image_service.dart';
-import 'metadata_service.dart';
-import 'palette_service.dart';
 
 /// Состояние импорта файлов в коллекцию.
 ///
@@ -13,16 +11,10 @@ class ImportController extends ChangeNotifier {
   ImportController({
     required this.collection,
     ImageService? imageService,
-    MetadataService? metadataService,
-    PaletteService? paletteService,
-  })  : _imageService = imageService ?? const ImageService(),
-        _metadataService = metadataService ?? const MetadataService(),
-        _paletteService = paletteService ?? const PaletteService();
+  }) : _imageService = imageService ?? const ImageService();
 
   final CollectionService collection;
   final ImageService _imageService;
-  final MetadataService _metadataService;
-  final PaletteService _paletteService;
 
   /// Идёт ли процесс импорта в данный момент.
   bool _isImporting = false;

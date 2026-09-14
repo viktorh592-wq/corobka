@@ -32,11 +32,11 @@ class PaletteService {
       codec.dispose();
 
       final colors = <String>[];
-      final addColor = (ui.Color? c) {
+      void addColor(ui.Color? c) {
         if (c == null) return;
         final hex = _toHex(c);
         if (!colors.contains(hex)) colors.add(hex);
-      };
+      }
 
       addColor(generator.dominantColor?.color);
       for (final entry in generator.paletteColors) {

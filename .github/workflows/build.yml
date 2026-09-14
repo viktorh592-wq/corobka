@@ -2,6 +2,8 @@ name: build-windows
 
 on:
   workflow_dispatch:        # ручной запуск из веб-интерфейса
+  push:
+    branches: [main]
 
 jobs:
   build:
@@ -21,8 +23,21 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Provide sqlite3.dll for FFI tests
+        shell: pwsh
+        run: |
+          # Тесты используют sqflite_common_ffi, которому на Windows нужен
+          # sqlite3.dll. Скачиваем официальную сборку и добавляем в PATH,
+          # чтобы DynamicLibrary.open('sqlite3.dll') нашёл библиотеку.
+          $ver = "3450100"
+          $url = "https://www.sqlite.org/2024/sqlite-dll-win-x64-$ver.zip"
+          $out = "$env:RUNNER_TEMP\sqlite3"
+          Invoke-WebRequest -Uri $url -OutFile "$out.zip"
+          Expand-Archive -Path "$out.zip" -DestinationPath $out -Force
+          Add-Content $env:GITHUB_PATH $out
+
       - name: Analyze
-        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+        run: flutter analyze
 
       - name: Test
         run: flutter test

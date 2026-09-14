@@ -12,12 +12,16 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late CollectionService service;
+  late String dbPath;
 
   setUp(() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
-    AppDatabase.overridePath =
-        '${Directory.systemTemp.path}/korobka_svc_test.db';
+    // Уникальный путь для каждого теста, чтобы БД всегда была чистой
+    // (фиксированный путь ломал повторные прогоны: данные накапливались).
+    dbPath = '${Directory.systemTemp.path}/korobka_svc_test_'
+        '${DateTime.now().microsecondsSinceEpoch}.db';
+    AppDatabase.overridePath = dbPath;
     await AppDatabase.close();
 
     service = CollectionService();
@@ -26,6 +30,10 @@ void main() {
 
   tearDown(() async {
     await AppDatabase.close();
+    final file = File(dbPath);
+    if (await file.exists()) {
+      await file.delete();
+    }
   });
 
   test('Создание, переименование и удаление папки', () async {

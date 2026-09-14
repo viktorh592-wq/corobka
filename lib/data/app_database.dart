@@ -12,7 +12,7 @@ class AppDatabase {
   AppDatabase._();
 
   static const _dbName = 'korobka.db';
-  static const _dbVersion = 1;
+  static const _dbVersion = 2;
 
   static Database? _instance;
 
@@ -24,10 +24,18 @@ class AppDatabase {
     if (_instance != null) return _instance!;
 
     // Для десктопных платформ используем FFI-реализацию SQLite.
-    if (databaseFactory == null) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    }
+    //
+    // КРИТИЧНО: глобальный геттер `databaseFactory` из sqflite_common
+    // НЕ МОЖЕТ быть null — он бросает StateError при обращении, если
+    // фабрика не установлена. Поэтому проверка `if (databaseFactory == null)`
+    // всегда была ложной, FFI-инициализация никогда не выполнялась и
+    // ЛЮБАЯ операция с БД падала («databaseFactory not initialized»).
+    // Именно поэтому в приложении работало только переключение темы.
+    //
+    // Правильная последовательность — безусловная (документированный
+    // шаблон sqflite_common_ffi):
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
 
     final dbPath = overridePath ?? await _defaultDbPath();
 
@@ -35,6 +43,7 @@ class AppDatabase {
       dbPath,
       version: _dbVersion,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
     return _instance!;
   }
@@ -78,7 +87,8 @@ class AppDatabase {
         palette TEXT,
         notes TEXT,
         is_favorite INTEGER NOT NULL DEFAULT 0,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        deleted_at INTEGER
       )
     ''');
 
@@ -109,6 +119,23 @@ class AppDatabase {
     await db.execute(
       'CREATE INDEX idx_items_title ON items (title)',
     );
+  }
+
+  /// Миграции при обновлении версии схемы.
+  static Future<void> _onUpgrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      // v2: корзина (мягкое удаление, как в Eagle).
+      // Колонка может уже существовать, если БД создана свежим кодом.
+      final cols = await db.rawQuery('PRAGMA table_info(items)');
+      final hasColumn = cols.any((c) => c['name'] == 'deleted_at');
+      if (!hasColumn) {
+        await db.execute('ALTER TABLE items ADD COLUMN deleted_at INTEGER');
+      }
+    }
   }
 
   /// Закрытие базы данных (вызывается при завершении работы).

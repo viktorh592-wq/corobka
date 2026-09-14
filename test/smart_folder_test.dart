@@ -13,12 +13,15 @@ void main() {
 
   late ItemDao itemDao;
   late SmartFolderService service;
+  late String dbPath;
 
   setUp(() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
-    AppDatabase.overridePath =
-        '${Directory.systemTemp.path}/korobka_smart_test.db';
+    // Уникальный путь для каждого теста, чтобы БД всегда была чистой.
+    dbPath = '${Directory.systemTemp.path}/korobka_smart_test_'
+        '${DateTime.now().microsecondsSinceEpoch}.db';
+    AppDatabase.overridePath = dbPath;
     await AppDatabase.close();
 
     itemDao = const ItemDao();
@@ -27,6 +30,10 @@ void main() {
 
   tearDown(() async {
     await AppDatabase.close();
+    final file = File(dbPath);
+    if (await file.exists()) {
+      await file.delete();
+    }
   });
 
   test('Умные папки создаются из правил', () {

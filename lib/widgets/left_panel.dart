@@ -8,9 +8,10 @@ import '../features/collection/collection_state.dart';
 
 /// Левая панель навигации по коллекции.
 ///
-/// Отображает системные разделы (Все, Избранное, Теги), пользовательские
-/// папки и умные папки. Поддерживает создание, переименование и удаление
-/// пользовательских папок.
+/// Отображает системные разделы (Все, Избранное, Теги, Корзина),
+/// пользовательские папки со счётчиками и умные папки. Поддерживает
+/// создание, переименование и удаление пользовательских папок,
+/// фильтрацию по тегам.
 class LeftPanel extends StatelessWidget {
   const LeftPanel({super.key});
 
@@ -29,17 +30,14 @@ class LeftPanel extends StatelessWidget {
             id: 'all',
             icon: Icons.photo_library_outlined,
             label: 'Все',
+            count: state.folderCounts.values.fold<int>(0, (a, b) => a + b),
           ),
-          _SystemTile(
+          const _SystemTile(
             id: 'favorites',
             icon: Icons.star_outline,
             label: 'Избранное',
           ),
-          _SystemTile(
-            id: 'tags',
-            icon: Icons.tag,
-            label: 'Теги',
-          ),
+          const _TagsSection(),
           const Divider(),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -71,6 +69,12 @@ class LeftPanel extends StatelessWidget {
           ),
           for (final smart in state.getSmartFolders())
             _SmartFolderTile(smartFolder: smart),
+          const Divider(),
+          const _SystemTile(
+            id: 'trash',
+            icon: Icons.delete_outline,
+            label: 'Корзина',
+          ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -119,6 +123,73 @@ class LeftPanel extends StatelessWidget {
   }
 }
 
+/// Раздел «Теги»: раскрывающийся список тегов с фильтрацией по клику.
+class _TagsSection extends StatefulWidget {
+  const _TagsSection();
+
+  @override
+  State<_TagsSection> createState() => _TagsSectionState();
+}
+
+class _TagsSectionState extends State<_TagsSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<CollectionState>();
+    final tags = state.tags;
+
+    return Column(
+      children: [
+        ListTile(
+          dense: true,
+          leading: const Icon(Icons.tag, size: 20),
+          title: const Text('Теги'),
+          selected: state.filterTagId != null && !_expanded,
+          selectedTileColor:
+              Theme.of(context).colorScheme.secondaryContainer,
+          trailing: Icon(
+            _expanded ? Icons.expand_less : Icons.expand_more,
+            size: 20,
+          ),
+          onTap: () => setState(() => _expanded = !_expanded),
+        ),
+        if (_expanded)
+          if (tags.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 48, top: 4, bottom: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Нет тегов',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                ),
+              ),
+            )
+          else
+            for (final tag in tags)
+              Padding(
+                padding: const EdgeInsets.only(left: 24),
+                child: ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: const Icon(Icons.label_outline, size: 16),
+                  title: Text(tag.name),
+                  selected: state.filterTagId == tag.id,
+                  selectedTileColor:
+                      Theme.of(context).colorScheme.secondaryContainer,
+                  onTap: () => state.setTagFilter(
+                    state.filterTagId == tag.id ? null : tag.id,
+                  ),
+                ),
+              ),
+      ],
+    );
+  }
+}
+
 /// Заголовок секции.
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader(this.label);
@@ -140,17 +211,19 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// Системный раздел (Все, Избранное, Теги).
+/// Системный раздел (Все, Избранное, Корзина).
 class _SystemTile extends StatelessWidget {
   const _SystemTile({
     required this.id,
     required this.icon,
     required this.label,
+    this.count,
   });
 
   final String id;
   final IconData icon;
   final String label;
+  final int? count;
 
   @override
   Widget build(BuildContext context) {
@@ -161,6 +234,14 @@ class _SystemTile extends StatelessWidget {
       dense: true,
       leading: Icon(icon, size: 20),
       title: Text(label),
+      trailing: count != null && count! > 0
+          ? Text(
+              '$count',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            )
+          : null,
       selected: selected,
       selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
       onTap: () => state.selectFolder(id),
@@ -168,7 +249,7 @@ class _SystemTile extends StatelessWidget {
   }
 }
 
-/// Пользовательская папка с контекстным меню.
+/// Пользовательская папка с контекстным меню и счётчиком.
 class _FolderTile extends StatelessWidget {
   const _FolderTile({required this.folder});
 
@@ -178,15 +259,27 @@ class _FolderTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<CollectionState>();
     final selected = state.selectedFolderId == folder.id.toString();
+    final count = state.folderCounts[folder.id];
 
-    return ListTile(
-      dense: true,
-      leading: const Icon(Icons.folder_outlined, size: 20),
-      title: Text(folder.name),
-      selected: selected,
-      selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
-      onTap: () => state.selectFolder(folder.id.toString()),
-      onLongPress: () => _showMenu(context, state),
+    return GestureDetector(
+      onSecondaryTapUp: (details) => _showMenu(context, state),
+      child: ListTile(
+        dense: true,
+        leading: const Icon(Icons.folder_outlined, size: 20),
+        title: Text(folder.name),
+        trailing: count != null && count > 0
+            ? Text(
+                '$count',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+              )
+            : null,
+        selected: selected,
+        selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
+        onTap: () => state.selectFolder(folder.id.toString()),
+        onLongPress: () => _showMenu(context, state),
+      ),
     );
   }
 
@@ -213,8 +306,10 @@ class _FolderTile extends StatelessWidget {
     );
 
     if (action == 'rename') {
+      if (!context.mounted) return;
       await _renameDialog(context, state);
     } else if (action == 'delete') {
+      if (!context.mounted) return;
       await _deleteDialog(context, state);
     }
   }
@@ -252,7 +347,10 @@ class _FolderTile extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Удалить папку?'),
-        content: Text('Папка «${folder.name}» будет удалена.'),
+        content: Text(
+          'Папка «${folder.name}» будет удалена. Элементы не удаляются — '
+          'они останутся в коллекции без папки.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -329,7 +427,7 @@ class _SmartFolderTile extends StatelessWidget {
                       ListTile(
                         dense: true,
                         leading: const Icon(Icons.image_outlined),
-                        title: Text(item.title ?? ''),
+                        title: Text(item.title),
                         subtitle: Text(
                           '${item.width ?? '?'} × ${item.height ?? '?'}'
                           ' · ${item.format ?? ''}',

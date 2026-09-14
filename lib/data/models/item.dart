@@ -14,6 +14,7 @@ class CollectionItem {
     this.notes,
     this.isFavorite = false,
     required this.createdAt,
+    this.deletedAt,
   });
 
   /// Уникальный идентификатор элемента.
@@ -49,6 +50,14 @@ class CollectionItem {
   /// Дата добавления элемента (unix-время, секунды).
   final int createdAt;
 
+  /// Время перемещения в корзину (unix-время, секунды).
+  /// `null` — элемент не удалён (как в Eagle: удаление сначала попадает
+  /// в корзину и может быть отменено).
+  final int? deletedAt;
+
+  /// Элемент находится в корзине.
+  bool get isTrashed => deletedAt != null;
+
   /// Создание объекта из строки БД (SQLite row).
   factory CollectionItem.fromMap(Map<String, dynamic> map) {
     return CollectionItem(
@@ -63,6 +72,7 @@ class CollectionItem {
       notes: map['notes'] as String?,
       isFavorite: (map['is_favorite'] as int) == 1,
       createdAt: map['created_at'] as int,
+      deletedAt: map['deleted_at'] as int?,
     );
   }
 
@@ -79,6 +89,44 @@ class CollectionItem {
       'notes': notes,
       'is_favorite': isFavorite ? 1 : 0,
       'created_at': createdAt,
+      'deleted_at': deletedAt,
     };
   }
+
+  /// Копирование с переопределением отдельных полей.
+  CollectionItem copyWith({
+    int? id,
+    int? folderId,
+    String? title,
+    String? path,
+    int? width,
+    int? height,
+    String? format,
+    String? palette,
+    String? notes,
+    bool? isFavorite,
+    int? createdAt,
+    int? deletedAt,
+    bool clearFolderId = false,
+    bool clearDeletedAt = false,
+    bool clearNotes = false,
+  }) {
+    return CollectionItem(
+      id: id ?? this.id,
+      folderId: clearFolderId ? null : (folderId ?? this.folderId),
+      title: title ?? this.title,
+      path: path ?? this.path,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      format: format ?? this.format,
+      palette: palette ?? this.palette,
+      notes: clearNotes ? null : (notes ?? this.notes),
+      isFavorite: isFavorite ?? this.isFavorite,
+      createdAt: createdAt ?? this.createdAt,
+      deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    );
+  }
+
+  /// Площадь изображения (для сортировки по размеру).
+  int get pixelArea => (width ?? 0) * (height ?? 0);
 }

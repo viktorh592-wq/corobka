@@ -16,15 +16,64 @@ class ItemDao {
   }
 
   /// Получение всех элементов (с сортировкой по дате добавления).
+  /// Элементы из корзины исключаются.
   Future<List<CollectionItem>> getAll({int? folderId}) async {
     final db = await _db;
     final rows = await db.query(
       'items',
-      where: folderId == null ? null : 'folder_id = ?',
+      where: folderId == null ? 'deleted_at IS NULL' : 'deleted_at IS NULL AND folder_id = ?',
       whereArgs: folderId == null ? null : [folderId],
       orderBy: 'created_at DESC',
     );
     return rows.map(CollectionItem.fromMap).toList();
+  }
+
+  /// Получение элементов, находящихся в корзине.
+  Future<List<CollectionItem>> getTrashed() async {
+    final db = await _db;
+    final rows = await db.query(
+      'items',
+      where: 'deleted_at IS NOT NULL',
+      orderBy: 'deleted_at DESC',
+    );
+    return rows.map(CollectionItem.fromMap).toList();
+  }
+
+  /// Количество активных (не удалённых) элементов по каждой папке.
+  /// Ключ `null` — количество элементов вне папок (корень).
+  Future<Map<int?, int>> countByFolder() async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT folder_id, COUNT(*) AS cnt
+      FROM items
+      WHERE deleted_at IS NULL
+      GROUP BY folder_id
+    ''');
+    return {
+      for (final row in rows) row['folder_id'] as int?: row['cnt'] as int,
+    };
+  }
+
+  /// Мягкое удаление: перемещение элемента в корзину.
+  Future<int> moveToTrash(int id, {required int deletedAt}) async {
+    final db = await _db;
+    return db.update(
+      'items',
+      {'deleted_at': deletedAt},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Восстановление элемента из корзины.
+  Future<int> restoreFromTrash(int id) async {
+    final db = await _db;
+    return db.update(
+      'items',
+      {'deleted_at': null},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   /// Получение элементов в указанной папке.
@@ -95,6 +144,11 @@ class ItemDao {
     final where = <String>[];
     final args = <Object?>[];
 
+    // Из поиска по умолчанию исключаем элементы в корзине.
+    if (!filter.includeTrashed) {
+      where.add('deleted_at IS NULL');
+    }
+
     if (filter.folderId != null) {
       where.add('folder_id = ?');
       args.add(filter.folderId);
@@ -151,7 +205,7 @@ class ItemDao {
     if (filter.query != null && filter.query!.trim().isNotEmpty) {
       final q = filter.query!.trim().toLowerCase();
       items = items.where((e) {
-        final title = (e.title ?? '').toLowerCase();
+        final title = e.title.toLowerCase();
         final notes = (e.notes ?? '').toLowerCase();
         return title.contains(q) || notes.contains(q);
       }).toList();
@@ -172,6 +226,7 @@ class ItemFilter {
     this.createdBefore,
     this.createdAfter,
     this.paletteColor,
+    this.includeTrashed = false,
   });
 
   final String? query;
@@ -182,4 +237,7 @@ class ItemFilter {
   final int? createdBefore;
   final int? createdAfter;
   final String? paletteColor;
+
+  /// Включать ли элементы из корзины в результат поиска.
+  final bool includeTrashed;
 }

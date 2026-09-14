@@ -7,6 +7,9 @@ import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
+  // Гарантируем инициализацию биндингов до обращения к плагинам
+  // (shared_preferences, path_provider) из асинхронного кода.
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const KorobkaApp());
 }
 

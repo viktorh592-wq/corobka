@@ -51,7 +51,6 @@ class ExportService {
         }
 
         final fileName = source.uri.pathSegments.last;
-        final destPath = '$targetPath${Platform.pathSeparator}$fileName';
 
         // Уникальное имя, чтобы не перезаписывать существующие файлы.
         final unique = await _uniqueName(fileName, targetPath);

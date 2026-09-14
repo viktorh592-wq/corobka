@@ -34,7 +34,7 @@ void main() {
   });
 
   test('Создание папки и получение списка', () async {
-    final dao = const FolderDao();
+    const dao = FolderDao();
     final id = await dao.insert(const Folder(
       id: 0,
       name: 'Скриншоты',
@@ -49,9 +49,9 @@ void main() {
   });
 
   test('Добавление элемента и привязка тега', () async {
-    final folderDao = const FolderDao();
-    final itemDao = const ItemDao();
-    final tagDao = const TagDao();
+    const folderDao = FolderDao();
+    const itemDao = ItemDao();
+    const tagDao = TagDao();
 
     final folderId = await folderDao.insert(const Folder(
       id: 0,

@@ -10,34 +10,60 @@ import '../images/import_controller.dart';
 import 'collection_service.dart';
 import 'smart_folder_service.dart';
 
+/// Режимы просмотра коллекции.
+enum ViewMode { grid, list, masonry }
+
+/// Режимы сортировки элементов (как в Eagle).
+enum SortMode {
+  dateDesc('По дате добавления (сначала новые)'),
+  dateAsc('По дате добавления (сначала старые)'),
+  nameAsc('По названию (А-Я)'),
+  nameDesc('По названию (Я-А)'),
+  sizeDesc('По размеру (сначала большие)');
+
+  const SortMode(this.label);
+  final String label;
+}
+
 /// Состояние коллекции.
 ///
-/// Хранит выбранную папку, режим просмотра, поисковый запрос, фильтр по цвету
+/// Хранит выбранную папку, режим просмотра, поисковый запрос, фильтры
 /// и загруженные данные коллекции. Обеспечивает импорт, управление
-/// папками/тегами, избранное, аннотации, поиск, фильтрацию, умные папки
-/// и экспорт.
+/// папками/тегами, избранное, аннотации, корзину, поиск, фильтрацию,
+/// умные папки и экспорт.
 class CollectionState extends ChangeNotifier {
   CollectionState({
     CollectionService? service,
     SettingsRepository? settings,
   })  : _service = service ?? CollectionService(),
-        _settings = settings ?? SettingsRepository(),
-        _importController =
-            ImportController(collection: service ?? CollectionService());
+        _settings = settings ?? SettingsRepository() {
+    // ВАЖНО: импортёр обязан использовать ТОТ ЖЕ экземпляр сервиса, что и
+    // состояние, иначе у него не инициализирован корневой каталог коллекции
+    // и файлы копировались бы в случайный каталог (Directory.current/images).
+    _importController = ImportController(collection: _service);
+    _importController.addListener(_onImportProgress);
+  }
 
   final CollectionService _service;
   final SettingsRepository _settings;
   final SmartFolderService _smartFolders = const SmartFolderService();
-  final ImportController _importController;
+  late final ImportController _importController;
+
+  /// Реакция на прогресс импорта (уведомляем UI о ходе копирования).
+  void _onImportProgress() => notifyListeners();
 
   String _selectedFolderId = 'all';
   ViewMode _viewMode = ViewMode.grid;
   String _searchQuery = '';
   String? _filterColor;
+  int? _filterTagId;
+  SortMode _sortMode = SortMode.dateDesc;
+  double _thumbnailExtent = 200;
 
   List<Folder> _folders = const [];
   List<CollectionItem> _items = const [];
   List<Tag> _tags = const [];
+  Map<int?, int> _folderCounts = const {};
 
   CollectionItem? _selectedItem;
   List<Tag> _selectedItemTags = const [];
@@ -45,11 +71,28 @@ class CollectionState extends ChangeNotifier {
   bool _isLoading = true;
   bool get isLoading => _isLoading;
 
+  /// Последнее сообщение об ошибке (для SnackBar в UI). `null` — ошибок нет.
+  String? _lastError;
+  String? get lastError => _lastError;
+
+  /// Сбрасывает показанную ошибку.
+  void clearError() {
+    if (_lastError == null) return;
+    _lastError = null;
+    notifyListeners();
+  }
+
   /// Доступ к сервису коллекции (для drag-and-drop контроллера).
   CollectionService get collectionService => _service;
 
   /// Контроллер импорта (drag-and-drop, выбор файлов/папки).
   ImportController get importController => _importController;
+
+  /// Идёт ли импорт файлов прямо сейчас.
+  bool get isImporting => _importController.isImporting;
+
+  /// Сколько файлов импортировано в текущей операции.
+  int get importedCount => _importController.importedCount;
 
   /// Идентификатор выбранной папки (по умолчанию — «Все»).
   String get selectedFolderId => _selectedFolderId;
@@ -63,6 +106,15 @@ class CollectionState extends ChangeNotifier {
   /// Выбранный цвет для фильтрации палитры.
   String? get filterColor => _filterColor;
 
+  /// Выбранный тег для фильтрации.
+  int? get filterTagId => _filterTagId;
+
+  /// Текущий режим сортировки.
+  SortMode get sortMode => _sortMode;
+
+  /// Максимальный размер превью в сетке (слайдер зума как в Eagle).
+  double get thumbnailExtent => _thumbnailExtent;
+
   /// Список папок коллекции.
   List<Folder> get folders => _folders;
 
@@ -71,6 +123,9 @@ class CollectionState extends ChangeNotifier {
 
   /// Список всех тегов коллекции.
   List<Tag> get tags => _tags;
+
+  /// Счётчики элементов по папкам (ключ `null` — элементы вне папок).
+  Map<int?, int> get folderCounts => _folderCounts;
 
   /// Выбранный элемент (для правой панели деталей).
   CollectionItem? get selectedItem => _selectedItem;
@@ -84,6 +139,9 @@ class CollectionState extends ChangeNotifier {
     final idx = _items.indexWhere((e) => e.id == _selectedItem!.id);
     return idx < 0 ? 0 : idx;
   }
+
+  /// Открыта ли сейчас корзина.
+  bool get isTrashView => _selectedFolderId == 'trash';
 
   /// Инициализация коллекции: настройка корневого каталога и загрузка данных.
   Future<void> initialize() async {
@@ -116,38 +174,59 @@ class CollectionState extends ChangeNotifier {
         debugPrint('loadViewMode error: $e');
       }
 
+      try {
+        final savedExtent = await _settings.loadThumbnailExtent();
+        if (savedExtent != null) _thumbnailExtent = savedExtent;
+      } catch (e) {
+        debugPrint('loadThumbnailExtent error: $e');
+      }
+
+      String? savedSort;
+      try {
+        savedSort = await _settings.loadSortMode();
+        final parsed = SortMode.values.asNameMap()[savedSort];
+        if (parsed != null) _sortMode = parsed;
+      } catch (e) {
+        debugPrint('loadSortMode error: $e');
+      }
+
       await _load();
     } catch (e, stack) {
       debugPrint('initialize error: $e\n$stack');
+      _lastError = 'Ошибка запуска: $e';
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  /// Загрузка папок, элементов и тегов из базы данных.
+  /// Загрузка папок, элементов, тегов и счётчиков из базы данных.
   Future<void> _load() async {
     _isLoading = true;
     notifyListeners();
 
     _folders = await _service.getFolders();
     _tags = await _service.getTags();
-    _items = await _loadItems();
+    _folderCounts = await _service.countByFolder();
+    _items = _applySort(await _loadItems());
     _isLoading = false;
     notifyListeners();
   }
 
-  /// Загрузка элементов с учётом выбранного раздела, поиска и фильтра по цвету.
+  /// Загрузка элементов с учётом выбранного раздела, поиска и фильтров.
   Future<List<CollectionItem>> _loadItems() async {
     final folderId = int.tryParse(_selectedFolderId);
     final favorites = _selectedFolderId == 'favorites';
 
     // При активном поиске применяем полнотекстовый поиск с фильтрами.
-    if (_searchQuery.trim().isNotEmpty || _filterColor != null) {
+    if (_searchQuery.trim().isNotEmpty ||
+        _filterColor != null ||
+        _filterTagId != null) {
       return _service.searchItems(
         query: _searchQuery,
         folderId: folderId,
         favoritesOnly: favorites,
         paletteColor: _filterColor,
+        tagIds: _filterTagId == null ? null : [_filterTagId!],
       );
     }
 
@@ -156,14 +235,40 @@ class CollectionState extends ChangeNotifier {
         return _service.getItems();
       case 'favorites':
         return _service.getFavorites();
+      case 'trash':
+        return _service.getTrashed();
       default:
         if (folderId == null) return _service.getItems();
         return _service.getItems(folderId: folderId);
     }
   }
 
+  /// Применяет текущую сортировку к списку элементов.
+  List<CollectionItem> _applySort(List<CollectionItem> items) {
+    final sorted = [...items];
+    switch (_sortMode) {
+      case SortMode.dateDesc:
+        sorted.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      case SortMode.dateAsc:
+        sorted.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      case SortMode.nameAsc:
+        sorted.sort(
+          (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+        );
+      case SortMode.nameDesc:
+        sorted.sort(
+          (a, b) => b.title.toLowerCase().compareTo(a.title.toLowerCase()),
+        );
+      case SortMode.sizeDesc:
+        sorted.sort((a, b) => b.pixelArea.compareTo(a.pixelArea));
+    }
+    return sorted;
+  }
+
   /// Публичный метод обновления списка элементов (после импорта).
   Future<void> refreshItems() => _loadItemsAndNotify();
+
+  // ─────────────────────────── ФИЛЬТРЫ И ПОИСК ───────────────────────────
 
   /// Установка поискового запроса и обновление результатов.
   Future<void> setSearchQuery(String query) async {
@@ -194,12 +299,50 @@ class CollectionState extends ChangeNotifier {
     await _loadItemsAndNotify();
   }
 
-  /// Выбор папки.
+  /// Фильтрация по тегу (клик по тегу в левой панели).
+  Future<void> setTagFilter(int? tagId) async {
+    if (tagId == _filterTagId) return;
+    _filterTagId = tagId;
+    _selectedItem = null;
+    _selectedItemTags = const [];
+    notifyListeners();
+    await _loadItemsAndNotify();
+  }
+
+  /// Установка режима сортировки.
+  Future<void> setSortMode(SortMode mode) async {
+    if (mode == _sortMode) return;
+    _sortMode = mode;
+    notifyListeners();
+    try {
+      await _settings.saveSortMode(mode.name);
+    } catch (e) {
+      debugPrint('saveSortMode error: $e');
+    }
+    await _loadItemsAndNotify();
+  }
+
+  /// Изменение размера превью (слайдер зума сетки).
+  Future<void> setThumbnailExtent(double extent) async {
+    if (extent == _thumbnailExtent) return;
+    _thumbnailExtent = extent;
+    notifyListeners();
+    try {
+      await _settings.saveThumbnailExtent(extent);
+    } catch (e) {
+      debugPrint('saveThumbnailExtent error: $e');
+    }
+  }
+
+  // ─────────────────────────── НАВИГАЦИЯ ───────────────────────────
+
+  /// Выбор папки/раздела.
   Future<void> selectFolder(String id) async {
     if (id == _selectedFolderId) return;
     _selectedFolderId = id;
     _selectedItem = null;
     _selectedItemTags = const [];
+    _filterTagId = null;
     notifyListeners();
     await _loadItemsAndNotify();
   }
@@ -209,7 +352,11 @@ class CollectionState extends ChangeNotifier {
     if (mode == _viewMode) return;
     _viewMode = mode;
     notifyListeners();
-    await _settings.saveViewMode(mode.name);
+    try {
+      await _settings.saveViewMode(mode.name);
+    } catch (e) {
+      debugPrint('saveViewMode error: $e');
+    }
   }
 
   /// Выбор элемента для просмотра в правой панели.
@@ -233,7 +380,8 @@ class CollectionState extends ChangeNotifier {
     await _load();
   }
 
-  /// Удаление папки.
+  /// Удаление папки (элементы остаются в коллекции, но без папки —
+  /// как в Eagle, где папка — лишь метка организации).
   Future<void> deleteFolder(int id) async {
     await _service.deleteFolder(id);
     if (_selectedFolderId == id.toString()) {
@@ -245,6 +393,9 @@ class CollectionState extends ChangeNotifier {
   // ─────────────────────────── АННОТАЦИИ ───────────────────────────
 
   /// Обновление названия и заметок выбранного элемента.
+  ///
+  /// ВАЖНО: не перезагружает выбор из БД, а обновляет локальную копию —
+  /// иначе текстовые поля правой панели «откатывались» бы при вводе.
   Future<void> updateItemAnnotations({
     String? title,
     String? notes,
@@ -257,7 +408,13 @@ class CollectionState extends ChangeNotifier {
       title: title,
       notes: notes,
     );
-    await selectItem(item);
+
+    _selectedItem = item.copyWith(
+      title: title,
+      notes: notes,
+      clearNotes: notes != null && notes.isEmpty,
+    );
+    notifyListeners();
     await _loadItemsAndNotify();
   }
 
@@ -269,8 +426,9 @@ class CollectionState extends ChangeNotifier {
     await _service.setFavorite(item.id, newValue);
 
     if (_selectedItem?.id == item.id) {
-      _selectedItem = _copyWith(item, isFavorite: newValue);
+      _selectedItem = _selectedItem!.copyWith(isFavorite: newValue);
     }
+    // Обновляем счётчики и список (элемент может исчезнуть из «Избранного»).
     await _loadItemsAndNotify();
   }
 
@@ -282,7 +440,7 @@ class CollectionState extends ChangeNotifier {
     if (item == null || tagName.trim().isEmpty) return;
 
     await _service.addTagToItem(item.id, tagName);
-    await selectItem(item);
+    await _reloadSelectedItemTags();
     await _loadTagsAndNotify();
   }
 
@@ -292,21 +450,73 @@ class CollectionState extends ChangeNotifier {
     if (item == null) return;
 
     await _service.removeTagFromItem(item.id, tagId);
-    await selectItem(item);
-    await _loadTagsAndNotify();
+    await _reloadSelectedItemTags();
+    // Если активен фильтр по этому тегу — обновляем список элементов.
+    if (_filterTagId == tagId) {
+      await _loadItemsAndNotify();
+    } else {
+      await _loadTagsAndNotify();
+    }
+  }
+
+  Future<void> _reloadSelectedItemTags() async {
+    final item = _selectedItem;
+    if (item == null) return;
+    _selectedItemTags = await _service.getTagsForItem(item.id);
+    notifyListeners();
   }
 
   // ─────────────────────────── ПЕРЕМЕЩЕНИЕ ───────────────────────────
 
-  /// Перемещение выбранного элемента в указанную папку.
+  /// Перемещение выбранного элемента в указанную папку (`null` — в корень).
   Future<void> moveItemToFolder(int? folderId) async {
     final item = _selectedItem;
     if (item == null) return;
 
     await _service.moveItemToFolder(item.id, folderId);
+    _selectedItem = item.copyWith(folderId: folderId, clearFolderId: folderId == null);
+    notifyListeners();
+    await _loadItemsAndNotify();
+  }
+
+  // ─────────────────────────── КОРЗИНА ───────────────────────────
+
+  /// Перемещение элемента в корзину (как в Eagle — удаление обратимо).
+  Future<void> trashItem(CollectionItem item) async {
+    await _service.moveItemToTrash(item.id);
+    if (_selectedItem?.id == item.id) {
+      _selectedItem = null;
+      _selectedItemTags = const [];
+    }
+    await _load();
+  }
+
+  /// Восстановление элемента из корзины.
+  Future<void> restoreItem(CollectionItem item) async {
+    await _service.restoreItemFromTrash(item.id);
+    if (_selectedItem?.id == item.id) {
+      _selectedItem = null;
+      _selectedItemTags = const [];
+    }
+    await _load();
+  }
+
+  /// Полное удаление элемента из корзины (файл + запись).
+  Future<void> purgeItem(CollectionItem item) async {
+    await _service.purgeItem(item);
+    if (_selectedItem?.id == item.id) {
+      _selectedItem = null;
+      _selectedItemTags = const [];
+    }
+    await _load();
+  }
+
+  /// Очистка корзины.
+  Future<void> emptyTrash() async {
+    await _service.emptyTrash();
     _selectedItem = null;
     _selectedItemTags = const [];
-    await _loadItemsAndNotify();
+    await _load();
   }
 
   // ─────────────────────────── УМНЫЕ ПАПКИ ───────────────────────────
@@ -321,19 +531,50 @@ class CollectionState extends ChangeNotifier {
   // ─────────────────────────── ИМПОРТ ───────────────────────────
 
   /// Открытие диалога выбора файлов и их импорт.
+  ///
+  /// Ошибки не «проглатываются»: они попадают в [lastError] и показываются
+  /// пользователю через SnackBar (раньше любые сбои были невидимыми).
   Future<void> importFiles() async {
-    await _importController.importFiles(folderId: _currentFolderId);
-    await _loadItemsAndNotify();
+    try {
+      await _importController.importFiles(folderId: _currentFolderId);
+      await _loadItemsAndNotify();
+      _lastError = importedCount > 0 ? null : null;
+    } catch (e) {
+      _lastError = 'Ошибка импорта: $e';
+      notifyListeners();
+    }
   }
 
-  /// Выбор папки и импорт всех изображений внутри неё.
+  /// Выбор папки и импорт всех изображений внутри неё (рекурсивно).
   Future<void> importDirectory() async {
-    await _importController.importDirectory(folderId: _currentFolderId);
-    await _loadItemsAndNotify();
+    try {
+      await _importController.importDirectory(folderId: _currentFolderId);
+      await _loadItemsAndNotify();
+    } catch (e) {
+      _lastError = 'Ошибка импорта папки: $e';
+      notifyListeners();
+    }
   }
 
   /// Идентификатор выбранной папки (числовой) или `null` для системных разделов.
   int? get _currentFolderId => int.tryParse(_selectedFolderId);
+
+  /// Числовой идентификатор выбранной папки для drag-and-drop импорта.
+  /// Для системных разделов (Все/Избранное/Корзина) — `null` (корень).
+  int? get currentNumericFolderId => _currentFolderId;
+
+  // ─────────────────────────── НАСТРОЙКИ ───────────────────────────
+
+  /// Текущий корневой каталог коллекции.
+  String? get rootPath => _service.rootPath;
+
+  /// Смена корневого каталога коллекции (настройки, как в Eagle).
+  Future<void> changeRootPath(String newPath) async {
+    if (newPath.trim().isEmpty) return;
+    await _service.initializeRoot(customPath: newPath.trim());
+    await _settings.saveRootPath(newPath.trim());
+    await _load();
+  }
 
   // ─────────────────────────── ЭКСПОРТ ───────────────────────────
 
@@ -355,7 +596,8 @@ class CollectionState extends ChangeNotifier {
   // ─────────────────────────── ВСПОМОГАТЕЛЬНОЕ ───────────────────────────
 
   Future<void> _loadItemsAndNotify() async {
-    _items = await _loadItems();
+    _items = _applySort(await _loadItems());
+    _folderCounts = await _service.countByFolder();
     notifyListeners();
   }
 
@@ -364,25 +606,10 @@ class CollectionState extends ChangeNotifier {
     notifyListeners();
   }
 
-  CollectionItem _copyWith(
-    CollectionItem item, {
-    bool? isFavorite,
-  }) {
-    return CollectionItem(
-      id: item.id,
-      folderId: item.folderId,
-      title: item.title,
-      path: item.path,
-      width: item.width,
-      height: item.height,
-      format: item.format,
-      palette: item.palette,
-      notes: item.notes,
-      isFavorite: isFavorite ?? item.isFavorite,
-      createdAt: item.createdAt,
-    );
+  @override
+  void dispose() {
+    _importController.removeListener(_onImportProgress);
+    _importController.dispose();
+    super.dispose();
   }
 }
-
-/// Режимы просмотра коллекции.
-enum ViewMode { grid, list }

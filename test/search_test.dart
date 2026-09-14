@@ -36,7 +36,7 @@ void main() {
     }
   });
 
-  Future<void> _insert(
+  Future<void> insertItem(
     String title, {
     String notes = '',
     bool fav = false,
@@ -55,17 +55,17 @@ void main() {
   }
 
   test('Полнотекстовый поиск по названию', () async {
-    await _insert('Главный экран');
-    await _insert('Экран настроек');
-    await _insert('Логотип');
+    await insertItem('Главный экран');
+    await insertItem('Экран настроек');
+    await insertItem('Логотип');
 
     final results = await searchService.search(query: 'экран');
     expect(results, hasLength(2));
   });
 
   test('Поиск по заметкам', () async {
-    await _insert('Photo1', notes: 'дизайн интерфейса');
-    await _insert('Photo2');
+    await insertItem('Photo1', notes: 'дизайн интерфейса');
+    await insertItem('Photo2');
 
     final results = await searchService.search(query: 'интерфейса');
     expect(results, hasLength(1));
@@ -73,8 +73,8 @@ void main() {
   });
 
   test('Фильтр по избранному', () async {
-    await _insert('Обычный');
-    await _insert('Важный', fav: true);
+    await insertItem('Обычный');
+    await insertItem('Важный', fav: true);
 
     final favorites = await searchService.search(favoritesOnly: true);
     expect(favorites, hasLength(1));
@@ -103,8 +103,8 @@ void main() {
   });
 
   test('Фильтр по цвету палитры', () async {
-    await _insert('Красный элемент', palette: '["FF5722","FFFFFF"]');
-    await _insert('Синий элемент', palette: '["2196F3","FFFFFF"]');
+    await insertItem('Красный элемент', palette: '["FF5722","FFFFFF"]');
+    await insertItem('Синий элемент', palette: '["2196F3","FFFFFF"]');
 
     final red = await searchService.search(paletteColor: 'FF5722');
     expect(red, hasLength(1));

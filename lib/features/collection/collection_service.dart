@@ -43,6 +43,12 @@ class CollectionService {
   /// Корневой каталог коллекции.
   String? _rootPath;
 
+  /// Текущий корневой каталог (для отображения в настройках).
+  String? get rootPath => _rootPath;
+
+  /// Открытие диалога выбора нового корневого каталога коллекции.
+  Future<String?> pickRootDirectory() => _imageService.pickDirectory();
+
   /// Инициализация корневого каталога коллекции.
   Future<void> initializeRoot({String? customPath}) async {
     if (customPath != null && customPath.trim().isNotEmpty) {
@@ -106,9 +112,51 @@ class CollectionService {
   Future<List<CollectionItem>> getItems({int? folderId}) =>
       _itemDao.getAll(folderId: folderId);
 
+  /// Элементы в корзине.
+  Future<List<CollectionItem>> getTrashed() => _itemDao.getTrashed();
+
+  /// Количество активных элементов по папкам (для счётчиков в левой панели).
+  Future<Map<int?, int>> countByFolder() => _itemDao.countByFolder();
+
   Future<List<CollectionItem>> getFavorites() => _search.search(
         favoritesOnly: true,
       );
+
+  /// Перемещение элемента в корзину (мягкое удаление, как в Eagle).
+  Future<void> moveItemToTrash(int id) async {
+    await _itemDao.moveToTrash(
+      id,
+      deletedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    );
+  }
+
+  /// Восстановление элемента из корзины.
+  Future<void> restoreItemFromTrash(int id) =>
+      _itemDao.restoreFromTrash(id);
+
+  /// Полное удаление элемента: файл на диске и запись в БД.
+  Future<void> purgeItem(CollectionItem item) async {
+    try {
+      final file = File(item.path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      // Файл мог быть перемещён/удалён пользователем — запись всё равно
+      // удаляем, чтобы не оставлять «битых» элементов в коллекции.
+      debugPrint('purgeItem: не удалось удалить файл: $e');
+    }
+    await _itemDao.delete(item.id);
+  }
+
+  /// Очистка корзины: полное удаление всех элементов в ней.
+  Future<int> emptyTrash() async {
+    final trashed = await _itemDao.getTrashed();
+    for (final item in trashed) {
+      await purgeItem(item);
+    }
+    return trashed.length;
+  }
 
   Future<CollectionItem> addItem({
     required String sourcePath,
@@ -118,7 +166,10 @@ class CollectionService {
     final targetPath =
         await _imageService.copyToDirectory(sourcePath, imagesDir);
 
-    final metadata = await _metadataService.extractMetadata(targetPath);
+    // Метаданные извлекаем в фоновом изоляте — UI не «замирает»
+    // при импорте больших изображений.
+    final metadata =
+        await _metadataService.extractMetadataInBackground(targetPath);
     final palette = await _paletteService.extractPalette(targetPath);
 
     final title = targetPath.split(Platform.pathSeparator).last;

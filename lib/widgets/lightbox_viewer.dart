@@ -124,7 +124,7 @@ class _LightboxViewerState extends State<LightboxViewer> {
                   children: [
                     Expanded(
                       child: Text(
-                        _current.title ?? '',
+                        _current.title,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
