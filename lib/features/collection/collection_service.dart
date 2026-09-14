@@ -159,6 +159,10 @@ class CollectionService {
   Future<int> renameFolder(int id, String newName) =>
       _folderDao.rename(id, newName);
 
+  /// Установка цвета иконки папки (HEX без решётки либо null — сброс).
+  Future<int> setFolderColor(int id, String? hexColor) =>
+      _folderDao.setColor(id, hexColor);
+
   Future<int> deleteFolder(int id) => _folderDao.delete(id);
 
   // ─────────── ЭЛЕМЕНТЫ ───────────

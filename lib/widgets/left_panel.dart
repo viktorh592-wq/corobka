@@ -7,17 +7,21 @@ import 'package:provider/provider.dart';
 import '../data/models/folder.dart';
 import '../features/collection/collection_state.dart';
 import 'app_dialog.dart';
+import 'folder_color_dialog.dart';
+import 'folder_icon.dart';
 
 /// Левая панель навигации по коллекции.
 ///
 /// Отображает системные разделы (Все, Избранное, Теги, Корзина) и
 /// пользовательские папки со счётчиками. Папки образуют иерархию —
 /// внутри любой папки можно создавать подпапки (рекурсивно). Поддерживает
-/// создание, переименование, удаление папок и фильтрацию по тегам.
+/// создание (через «+» в заголовке и «+» напротив каждой папки),
+/// переименование, удаление, настройку цвета иконки папки, поиск по
+/// папкам и фильтрацию по тегам.
 ///
 /// Все заголовки секций выполнены в едином стиле: иконка в акцентном
 /// («управляющем») цвете + крупный полужирный текст. Диалог создания
-/// папки открывается рядом с кнопкой «+».
+/// папки открывается рядом с нажатой кнопкой «+».
 class LeftPanel extends StatefulWidget {
   const LeftPanel({super.key});
 
@@ -30,6 +34,19 @@ class _LeftPanelState extends State<LeftPanel> {
   /// (окно открывается рядом с кнопкой, а не в центре экрана).
   final GlobalKey _addFolderButtonKey = GlobalKey();
 
+  /// Видимость поля поиска по папкам.
+  bool _folderSearchVisible = false;
+
+  /// Контроллер поля поиска по папкам.
+  final TextEditingController _folderSearchController =
+      TextEditingController();
+
+  @override
+  void dispose() {
+    _folderSearchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     // Fallback на случай темы без расширения PanelColors.
@@ -37,9 +54,17 @@ class _LeftPanelState extends State<LeftPanel> {
         PanelColors.fallback(Theme.of(context).brightness);
     final state = context.watch<CollectionState>();
 
+    // Поиск по папкам: строим фильтр дерева (совпадения + их предки).
+    final query = _folderSearchController.text.trim().toLowerCase();
+    final filter = _buildTreeFilter(state.folders, query);
+
     // Корневые папки (parent_id IS NULL) раскрываются рекурсивно через
-    // _FolderTile, который сам рендерит свои подпапки.
-    final rootFolders = state.subfoldersOf(null);
+    // _FolderTile, который сам рендерит свои подпапки. При активном
+    // поиске остаются только видимые узлы (совпадения и их предки).
+    final rootFolders = state
+        .subfoldersOf(null)
+        .where((f) => filter == null || filter.visibleIds.contains(f.id))
+        .toList();
 
     return Material(
       color: colors.panel,
@@ -66,15 +91,78 @@ class _LeftPanelState extends State<LeftPanel> {
           _SectionHeader(
             'Папки',
             icon: Icons.folder_outlined,
-            trailing: IconButton(
-              key: _addFolderButtonKey,
-              tooltip: 'Создать папку',
-              icon: const Icon(Icons.add, size: 20),
-              onPressed: () => _createFolderDialog(context, state),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Поиск по папкам (как на референс-скриншоте Eagle).
+                IconButton(
+                  tooltip: 'Поиск по папкам',
+                  icon: Icon(
+                    Icons.search,
+                    size: 20,
+                    color: _folderSearchVisible
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _folderSearchVisible = !_folderSearchVisible;
+                      if (!_folderSearchVisible) {
+                        _folderSearchController.clear();
+                      }
+                    });
+                  },
+                ),
+                IconButton(
+                  key: _addFolderButtonKey,
+                  tooltip: 'Создать папку',
+                  icon: const Icon(Icons.add, size: 20),
+                  onPressed: () => _createFolderDialog(context, state),
+                ),
+              ],
             ),
           ),
-          for (final folder in rootFolders)
-            _FolderTile(folder: folder, level: 0),
+          if (_folderSearchVisible)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: TextField(
+                controller: _folderSearchController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Поиск по папкам...',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  isDense: true,
+                  suffixIcon: query.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Очистить',
+                          icon: const Icon(Icons.close, size: 16),
+                          onPressed: () {
+                            setState(() => _folderSearchController.clear());
+                          },
+                        ),
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+          if (filter != null && rootFolders.isEmpty)
+            // Ничего не найдено при активном поиске по папкам.
+            Padding(
+              padding: const EdgeInsets.only(left: 16, top: 6, bottom: 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Папки не найдены',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                ),
+              ),
+            )
+          else
+            for (final folder in rootFolders)
+              _FolderTile(folder: folder, level: 0, filter: filter),
           const Divider(),
           const _SystemTile(
             id: 'trash',
@@ -96,6 +184,33 @@ class _LeftPanelState extends State<LeftPanel> {
     );
   }
 
+  /// Построение фильтра дерева папок для поиска.
+  ///
+  /// Видимыми считаются папки, чьё имя содержит запрос, а также все их
+  /// предки (чтобы совпадения не «висели» оторванными от иерархии).
+  /// При пустом запросе возвращается null — дерево показывается целиком.
+  _FolderTreeFilter? _buildTreeFilter(List<Folder> all, String query) {
+    if (query.isEmpty) return null;
+
+    final byId = {for (final f in all) f.id: f};
+    final visibleIds = <int>{
+      for (final f in all)
+        if (f.name.toLowerCase().contains(query)) f.id,
+    };
+
+    // Поднимаемся от каждого совпадения к корню, добавляя предков.
+    for (final id in visibleIds.toList()) {
+      var current = byId[id];
+      while (current?.parentId != null) {
+        final parentId = current!.parentId!;
+        if (!visibleIds.add(parentId)) break; // предок уже добавлен
+        current = byId[parentId];
+      }
+    }
+
+    return _FolderTreeFilter(visibleIds: visibleIds);
+  }
+
   /// Диалог создания папки. Открывается рядом с кнопкой «+» (по её
   /// глобальной позиции), а не в центре экрана.
   Future<void> _createFolderDialog(
@@ -113,6 +228,15 @@ class _LeftPanelState extends State<LeftPanel> {
       await state.createFolder(name.trim());
     }
   }
+}
+
+/// Фильтр видимости узлов дерева папок при поиске по папкам.
+class _FolderTreeFilter {
+  const _FolderTreeFilter({required this.visibleIds});
+
+  /// Идентификаторы папок, которые остаются видимыми
+  /// (совпадения по имени + все их предки).
+  final Set<int> visibleIds;
 }
 
 /// Диалог ввода имени папки/подпапки.
@@ -284,7 +408,13 @@ class _TagsSectionState extends State<_TagsSection> {
             size: 20,
             color: Theme.of(context).colorScheme.primary,
           ),
-          title: const Text('Теги'),
+          title: Text(
+            'Теги',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
           selected: state.filterTagId != null && !_expanded,
           selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
           trailing: Row(
@@ -360,7 +490,8 @@ class _TagsSectionState extends State<_TagsSection> {
 }
 
 /// Заголовок секции — единый стиль для всех блоков панели:
-/// иконка в акцентном цвете + крупный полужирный текст.
+/// иконка в акцентном цвете + крупный полужирный текст
+/// (увеличенный кегль: 16px, как просили для «Коллекция/Папки/Корзина»).
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader(this.label, {this.icon, this.trailing});
 
@@ -378,14 +509,14 @@ class _SectionHeader extends StatelessWidget {
       child: Row(
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 16, color: scheme.primary),
+            Icon(icon, size: 18, color: scheme.primary),
             const SizedBox(width: 6),
           ],
           Expanded(
             child: Text(
               label,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontSize: 14,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.3,
                     color: scheme.onSurfaceVariant,
@@ -424,7 +555,10 @@ class _SystemTile extends StatelessWidget {
       leading: Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
       title: Text(
         label,
-        style: Theme.of(context).textTheme.bodyMedium,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
       ),
       trailing: count != null && count! > 0
           ? Text(
@@ -441,14 +575,21 @@ class _SystemTile extends StatelessWidget {
   }
 }
 
-/// Пользовательская папка с контекстным меню, счётчиком и поддержкой
-/// иерархии подпапок. [level] — уровень вложенности (0 = корневая),
-/// используется для визуального отступа слева.
+/// Пользовательская папка с контекстным меню, счётчиком, кнопкой «+»
+/// (быстрое создание подпапки) и поддержкой иерархии подпапок.
+/// [level] — уровень вложенности (0 = корневая), используется для
+/// визуального отступа слева. [filter] — активный фильтр поиска по
+/// папкам (null — поиск выключен, дерево показывается целиком).
 class _FolderTile extends StatefulWidget {
-  const _FolderTile({required this.folder, required this.level});
+  const _FolderTile({
+    required this.folder,
+    required this.level,
+    this.filter,
+  });
 
   final Folder folder;
   final int level;
+  final _FolderTreeFilter? filter;
 
   @override
   State<_FolderTile> createState() => _FolderTileState();
@@ -456,15 +597,25 @@ class _FolderTile extends StatefulWidget {
 
 class _FolderTileState extends State<_FolderTile> {
   /// Раскрыта ли папка (видны ли её подпапки). По умолчанию collapsed.
+  /// Во время поиска по папкам раскрывается автоматически.
   bool _expanded = false;
+
+  /// Ключ кнопки «+» этой папки — диалог создания подпапки открывается
+  /// рядом с ней.
+  final GlobalKey _addSubfolderButtonKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<CollectionState>();
     final selected = state.selectedFolderId == widget.folder.id.toString();
     final count = state.folderCounts[widget.folder.id];
-    final children = state.subfoldersOf(widget.folder.id);
+    final searching = widget.filter != null;
+    final children = state
+        .subfoldersOf(widget.folder.id)
+        .where((c) => !searching || widget.filter!.visibleIds.contains(c.id))
+        .toList();
     final hasChildren = children.isNotEmpty;
+    final expanded = _expanded || searching;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -487,7 +638,7 @@ class _FolderTileState extends State<_FolderTile> {
                       child: Padding(
                         padding: const EdgeInsets.all(2),
                         child: Icon(
-                          _expanded
+                          expanded
                               ? Icons.expand_more
                               : Icons.chevron_right,
                           size: 18,
@@ -496,11 +647,11 @@ class _FolderTileState extends State<_FolderTile> {
                     )
                   else
                     const SizedBox(width: 22),
-                  // Иконка папки — в акцентном цвете элементов управления.
-                  Icon(
-                    Icons.folder_outlined,
+                  // Иконка папки: цветная (если задана настройка цвета)
+                  // либо стандартная — в акцентном цвете элементов.
+                  FolderIcon(
+                    colorHex: widget.folder.color,
                     size: 20,
-                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ],
               ),
@@ -508,14 +659,29 @@ class _FolderTileState extends State<_FolderTile> {
                 widget.folder.name,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              trailing: count != null && count > 0
-                  ? Text(
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // «+» напротив каждой папки — быстрое создание подпапки.
+                  IconButton(
+                    key: _addSubfolderButtonKey,
+                    tooltip: 'Добавить подпапку',
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(4),
+                    constraints:
+                        const BoxConstraints(minWidth: 26, minHeight: 26),
+                    icon: const Icon(Icons.add, size: 18),
+                    onPressed: () => _addSubfolder(context, state),
+                  ),
+                  if (count != null && count > 0)
+                    Text(
                       '$count',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context).colorScheme.outline,
                           ),
-                    )
-                  : null,
+                    ),
+                ],
+              ),
               selected: selected,
               selectedTileColor:
                   Theme.of(context).colorScheme.secondaryContainer,
@@ -524,15 +690,41 @@ class _FolderTileState extends State<_FolderTile> {
             ),
           ),
         ),
-        // Дочерние подпапки (рекурсивно).
-        if (_expanded && hasChildren)
+        // Дочерние подпапки (рекурсивно). Во время поиска — автоматически
+        // раскрыты, чтобы совпадения были видны сразу.
+        if (expanded && hasChildren)
           for (final child in children)
-            _FolderTile(folder: child, level: widget.level + 1),
+            _FolderTile(
+              folder: child,
+              level: widget.level + 1,
+              filter: widget.filter,
+            ),
       ],
     );
   }
 
-  /// Контекстное меню: создание подпапки, переименование, удаление.
+  /// Быстрое создание подпапки по кнопке «+»: раскрываем папку и
+  /// открываем диалог ввода имени рядом с нажатой кнопкой.
+  Future<void> _addSubfolder(
+      BuildContext context, CollectionState state) async {
+    setState(() => _expanded = true);
+
+    final name = await _showFolderNameDialog(
+      context: context,
+      title: 'Подпапка в «${widget.folder.name}»',
+      label: 'Название подпапки',
+      hint: 'Например: Иконки',
+      confirmLabel: 'Создать',
+      anchorKey: _addSubfolderButtonKey,
+    );
+
+    if (name != null && name.trim().isNotEmpty) {
+      await state.createSubfolder(name.trim(), widget.folder.id);
+    }
+  }
+
+  /// Контекстное меню: создание подпапки, цвет иконки, переименование,
+  /// удаление.
   Future<void> _showMenu(BuildContext context, CollectionState state) async {
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -555,6 +747,11 @@ class _FolderTileState extends State<_FolderTile> {
               onTap: () => Navigator.pop(context, 'add_subfolder'),
             ),
             ListTile(
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text('Цвет иконки...'),
+              onTap: () => Navigator.pop(context, 'color'),
+            ),
+            ListTile(
               leading: const Icon(Icons.drive_file_rename_outline),
               title: const Text('Переименовать'),
               onTap: () => Navigator.pop(context, 'rename'),
@@ -573,7 +770,10 @@ class _FolderTileState extends State<_FolderTile> {
       if (!context.mounted) return;
       // Автоматически раскрываем родителя — чтобы новая подпапка была видна.
       setState(() => _expanded = true);
-      await _createSubfolderDialog(context, state);
+      await _addSubfolderFromMenu(context, state);
+    } else if (action == 'color') {
+      if (!context.mounted) return;
+      await _folderColorDialog(context, state);
     } else if (action == 'rename') {
       if (!context.mounted) return;
       await _renameDialog(context, state);
@@ -583,8 +783,8 @@ class _FolderTileState extends State<_FolderTile> {
     }
   }
 
-  /// Диалог создания подпапки внутри текущей папки.
-  Future<void> _createSubfolderDialog(
+  /// Создание подпапки из контекстного меню (без привязки к кнопке «+»).
+  Future<void> _addSubfolderFromMenu(
     BuildContext context,
     CollectionState state,
   ) async {
@@ -599,6 +799,24 @@ class _FolderTileState extends State<_FolderTile> {
     if (name != null && name.trim().isNotEmpty) {
       await state.createSubfolder(name.trim(), widget.folder.id);
     }
+  }
+
+  /// Диалог «Настройка цвета папки»: выбор цвета иконки (пресеты +
+  /// кастомный цвет + HSV-палитра) с сохранением в БД.
+  Future<void> _folderColorDialog(
+    BuildContext context,
+    CollectionState state,
+  ) async {
+    final result = await showFolderColorDialog(
+      context,
+      folderName: widget.folder.name,
+      currentHex: widget.folder.color,
+    );
+
+    // null — отмена (крестик); '' — сброс на стандартный цвет;
+    // иначе HEX-строка выбранного цвета.
+    if (result == null) return;
+    await state.setFolderColor(widget.folder.id, result.isEmpty ? null : result);
   }
 
   Future<void> _renameDialog(

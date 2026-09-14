@@ -65,6 +65,17 @@ class FolderDao {
     );
   }
 
+  /// Установка цвета иконки папки. `null` возвращает стандартный цвет.
+  Future<int> setColor(int id, String? hexColor) async {
+    final db = await _db;
+    return db.update(
+      'folders',
+      {'color': hexColor},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   /// Перемещение папки под нового родителя (null — в корень).
   Future<int> moveToParent(int id, int? parentId) async {
     final db = await _db;

@@ -489,6 +489,16 @@ class CollectionState extends ChangeNotifier {
     await _load();
   }
 
+  /// Установка цвета иконки папки («настройка цвета папки»).
+  /// [hexColor] — HEX-строка без решётки либо `null` для сброса
+  /// на стандартный акцентный цвет. Перезагружает только список папок,
+  /// чтобы дерево в левой панели мгновенно перекрасилось.
+  Future<void> setFolderColor(int id, String? hexColor) async {
+    await _service.setFolderColor(id, hexColor);
+    _folders = await _service.getFolders();
+    notifyListeners();
+  }
+
   /// Удаление папки (элементы остаются в коллекции, но без папки —
   /// как в Eagle, где папка — лишь метка организации). Дочерние подпапки
   /// поднимаются на уровень удаляемой (наследуют её parent_id).

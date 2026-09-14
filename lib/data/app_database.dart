@@ -12,7 +12,7 @@ class AppDatabase {
   AppDatabase._();
 
   static const _dbName = 'korobka.db';
-  static const _dbVersion = 3;
+  static const _dbVersion = 4;
 
   static Database? _instance;
 
@@ -70,7 +70,8 @@ class AppDatabase {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         parent_id INTEGER,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        color TEXT
       )
     ''');
 
@@ -150,6 +151,26 @@ class AppDatabase {
       final hasBpm = cols.any((c) => c['name'] == 'bpm');
       if (!hasBpm) {
         await db.execute('ALTER TABLE items ADD COLUMN bpm INTEGER');
+      }
+    }
+
+    if (oldVersion < 4) {
+      // v4: цвет иконки папки (HEX-строка) для «настройки цвета папки».
+      // Защита: у совсем старых БД (например, легаси-схема v1 из тестов)
+      // таблицы folders может не быть — создаём её целиком.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS folders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          parent_id INTEGER,
+          created_at INTEGER NOT NULL,
+          color TEXT
+        )
+      ''');
+      final cols = await db.rawQuery('PRAGMA table_info(folders)');
+      final hasColor = cols.any((c) => c['name'] == 'color');
+      if (!hasColor) {
+        await db.execute('ALTER TABLE folders ADD COLUMN color TEXT');
       }
     }
   }

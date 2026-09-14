@@ -7,6 +7,7 @@ class Folder {
     required this.name,
     this.parentId,
     required this.createdAt,
+    this.color,
   });
 
   /// Уникальный идентификатор папки.
@@ -21,6 +22,10 @@ class Folder {
   /// Дата создания папки (unix-время, секунды).
   final int createdAt;
 
+  /// Цвет иконки папки (HEX-строка без решётки, например «F44336»).
+  /// `null` — используется стандартный акцентный цвет приложения.
+  final String? color;
+
   /// Создание объекта из строки БД (SQLite row).
   factory Folder.fromMap(Map<String, dynamic> map) {
     return Folder(
@@ -28,6 +33,7 @@ class Folder {
       name: map['name'] as String,
       parentId: map['parent_id'] as int?,
       createdAt: map['created_at'] as int,
+      color: map['color'] as String?,
     );
   }
 
@@ -37,6 +43,7 @@ class Folder {
       'name': name,
       'parent_id': parentId,
       'created_at': createdAt,
+      'color': color,
     };
   }
 }

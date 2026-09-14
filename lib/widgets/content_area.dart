@@ -8,8 +8,10 @@ import 'package:provider/provider.dart';
 import '../data/models/item.dart';
 import '../features/collection/collection_state.dart';
 import 'app_dialog.dart';
+import 'color_sliders.dart';
 import 'duplicates_dialog.dart';
 import 'drop_zone.dart';
+import 'folder_icon.dart';
 import 'lightbox_viewer.dart';
 import 'media_placeholder.dart';
 
@@ -739,38 +741,121 @@ class _ItemCard extends StatelessWidget {
   }
 
   /// Диалог перемещения элемента в папку.
+  ///
+  /// Содержит поле поиска по папкам (фильтрация списка по названию,
+  /// как на референс-скриншоте) и цветные иконки папок — цвет берётся
+  /// из «настройки цвета папки».
   Future<void> _moveToFolderDialog(
     BuildContext context,
     CollectionState state,
   ) async {
-    final folders = state.folders;
     final selected = await showDialog<int?>(
       context: context,
-      builder: (context) => AppDialog(
-        title: 'Переместить в папку',
-        content: SizedBox(
-          width: 280,
-          height: 300,
-          child: ListView(
-            shrinkWrap: false,
-            children: [
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.folder_off_outlined),
-                title: const Text('Без папки (корень)'),
-                onTap: () => Navigator.pop(context, -1),
-              ),
-              for (final folder in folders)
-                ListTile(
-                  dense: true,
-                  leading: const Icon(Icons.folder_outlined),
-                  title: Text(folder.name),
-                  onTap: () => Navigator.pop(context, folder.id),
+      builder: (dialogContext) {
+        final queryController = TextEditingController();
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final query = queryController.text.trim().toLowerCase();
+            final folders = query.isEmpty
+                ? state.folders
+                : state.folders
+                    .where((f) => f.name.toLowerCase().contains(query))
+                    .toList();
+
+            return AppDialog(
+              title: 'Переместить в папку',
+              content: SizedBox(
+                width: 300,
+                height: 360,
+                child: Column(
+                  children: [
+                    // ── Поиск по папкам ──
+                    TextField(
+                      controller: queryController,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Поиск папки...',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        suffixIcon: query.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: () {
+                                  setDialogState(() => queryController.clear());
+                                },
+                              ),
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: folders.isEmpty
+                          ? Center(
+                              child: Text(
+                                'Папки не найдены',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .outline,
+                                    ),
+                              ),
+                            )
+                          : ListView(
+                              shrinkWrap: false,
+                              children: [
+                                if (query.isEmpty)
+                                  ListTile(
+                                    dense: true,
+                                    leading:
+                                        const Icon(Icons.folder_off_outlined),
+                                    title:
+                                        const Text('Без папки (корень)'),
+                                    onTap: () =>
+                                        Navigator.pop(dialogContext, -1),
+                                  ),
+                                for (final folder in folders)
+                                  Builder(builder: (context) {
+                                    final count =
+                                        state.folderCounts[folder.id] ?? 0;
+                                    return ListTile(
+                                      dense: true,
+                                      leading: FolderIcon(
+                                        colorHex: folder.color,
+                                        size: 20,
+                                      ),
+                                      title: Text(folder.name),
+                                      trailing: count > 0
+                                          ? Text(
+                                              '$count',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .outline,
+                                                  ),
+                                            )
+                                          : null,
+                                      onTap: () => Navigator.pop(
+                                          dialogContext, folder.id),
+                                    );
+                                  }),
+                              ],
+                            ),
+                    ),
+                  ],
                 ),
-            ],
-          ),
-        ),
-      ),
+              ),
+            );
+          },
+        );
+      },
     );
 
     if (selected == null) return;
@@ -1121,17 +1206,17 @@ class _ColorFilterDialogState extends State<_ColorFilterDialog> {
               // ── HSV-палитра ──
               Text('Палитра', style: theme.textTheme.labelSmall),
               const SizedBox(height: 6),
-              _HueSlider(
+              HueSlider(
                 value: _hsv.hue,
                 onChanged: (h) => _syncHsv(_hsv.withHue(h)),
               ),
               const SizedBox(height: 8),
-              _SaturationSlider(
+              SaturationSlider(
                 hsv: _hsv,
                 onChanged: (s) => _syncHsv(_hsv.withSaturation(s)),
               ),
               const SizedBox(height: 8),
-              _ValueSlider(
+              ValueSlider(
                 hsv: _hsv,
                 onChanged: (v) => _syncHsv(_hsv.withValue(v)),
               ),
@@ -1167,142 +1252,6 @@ class _ColorFilterDialogState extends State<_ColorFilterDialog> {
         FilledButton(
           onPressed: _apply,
           child: const Text('Применить'),
-        ),
-      ],
-    );
-  }
-}
-
-/// Слайдер тона (hue) с радужным градиентом на треке.
-/// Жесты и ползунок берёт Material Slider; цветной трек рисуем под ним.
-class _HueSlider extends StatelessWidget {
-  const _HueSlider({required this.value, required this.onChanged});
-
-  final double value;
-  final ValueChanged<double> onChanged;
-
-  static const _rainbow = [
-    Color(0xFFFF0000),
-    Color(0xFFFFFF00),
-    Color(0xFF00FF00),
-    Color(0xFF00FFFF),
-    Color(0xFF0000FF),
-    Color(0xFFFF00FF),
-    Color(0xFFFF0000),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return _GradientSlider(
-      value: value / 360.0,
-      fromColor: const Color(0xFFFF0000),
-      toColor: const Color(0xFFFF0000),
-      gradient: const LinearGradient(colors: _rainbow),
-      onChanged: (v) => onChanged(v * 360.0),
-    );
-  }
-}
-
-/// Слайдер насыщенности (saturation) с горизонтальным градиентом
-/// от серого к насыщенному цвету текущего тона.
-class _SaturationSlider extends StatelessWidget {
-  const _SaturationSlider({
-    required this.hsv,
-    required this.onChanged,
-  });
-
-  final HSVColor hsv;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final baseColor = hsv.withSaturation(1).withValue(1).toColor();
-    final greyColor = hsv.withSaturation(0).withValue(1).toColor();
-    return _GradientSlider(
-      value: hsv.saturation,
-      fromColor: greyColor,
-      toColor: baseColor,
-      onChanged: onChanged,
-    );
-  }
-}
-
-/// Слайдер яркости (value) с градиентом от чёрного к насыщенному цвету.
-class _ValueSlider extends StatelessWidget {
-  const _ValueSlider({
-    required this.hsv,
-    required this.onChanged,
-  });
-
-  final HSVColor hsv;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final baseColor = hsv.withSaturation(1).withValue(1).toColor();
-    return _GradientSlider(
-      value: hsv.value,
-      fromColor: Colors.black,
-      toColor: baseColor,
-      onChanged: onChanged,
-    );
-  }
-}
-
-/// Универсальный слайдер с произвольным горизонтальным градиентом на треке.
-/// Поверх Flutter-слайдера кладём ClipRRect с LinearGradient, чтобы
-/// получить «цветной трек». Сам ползунок и логика перетаскивания —
-/// от Material Slider.
-class _GradientSlider extends StatelessWidget {
-  const _GradientSlider({
-    required this.value,
-    required this.fromColor,
-    required this.toColor,
-    required this.onChanged,
-    this.gradient,
-  });
-
-  final double value;
-  final Color fromColor;
-  final Color toColor;
-  final ValueChanged<double> onChanged;
-
-  /// Опционально: кастомный многоцветный градиент (например, радуга
-  /// для hue). Если null — используется двуцветный fromColor → toColor.
-  final Gradient? gradient;
-
-  @override
-  Widget build(BuildContext context) {
-    final trackGradient = gradient ??
-        LinearGradient(colors: [fromColor, toColor]);
-
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // Цветной трек.
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: Container(
-            height: 14,
-            decoration: BoxDecoration(gradient: trackGradient),
-          ),
-        ),
-        // Поверх — прозрачный Material Slider, который даёт ползунок
-        // и обрабатывает жесты перетаскивания.
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: 14,
-            activeTrackColor: Colors.transparent,
-            inactiveTrackColor: Colors.transparent,
-            thumbColor: Colors.white,
-            overlayColor: const Color(0x14000000),
-          ),
-          child: Slider(
-            min: 0.0,
-            max: 1.0,
-            value: value.clamp(0.0, 1.0),
-            onChanged: onChanged,
-          ),
         ),
       ],
     );
