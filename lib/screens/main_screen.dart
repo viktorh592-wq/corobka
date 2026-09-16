@@ -110,6 +110,24 @@ class _MainScreenState extends State<MainScreen> {
           appBar: AppBar(
             title: const Text('коробка'),
             actions: [
+              // Индикатор-кнопка локального HTTP-сервера: показывает статус
+              // (зелёный — запущен, серый — выключен) и открывает настройки
+              // по клику.
+              Selector<CollectionState, bool>(
+                selector: (_, s) => s.isHttpServerRunning,
+                builder: (context, running, _) => IconButton(
+                  tooltip: running
+                      ? 'Локальный сервер запущен — клик для настроек'
+                      : 'Локальный сервер выключен — клик для настроек',
+                  icon: Icon(
+                    running ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+                    color: running
+                        ? Colors.green
+                        : Theme.of(context).colorScheme.outline,
+                  ),
+                  onPressed: () => _openSettings(context),
+                ),
+              ),
               IconButton(
                 tooltip: 'Настройки',
                 icon: const Icon(Icons.settings_outlined),
@@ -151,7 +169,9 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  /// Диалог настроек: корневой каталог коллекции (как папка библиотеки Eagle).
+  /// Диалог настроек: корневой каталог коллекции (как папка библиотеки Eagle)
+  /// и локальный HTTP-сервер для прямого приёма файлов (как Eagle Browser
+  /// Extension).
   Future<void> _openSettings(BuildContext context) async {
     final state = context.read<CollectionState>();
 
@@ -159,26 +179,7 @@ class _MainScreenState extends State<MainScreen> {
       context: context,
       builder: (dialogContext) => AppDialog(
         title: 'Настройки',
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Корневой каталог коллекции',
-              style: Theme.of(dialogContext).textTheme.labelLarge,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              state.rootPath ?? 'Не задан',
-              style: Theme.of(dialogContext).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Новые импортированные файлы будут сохраняться в выбранный '
-              'каталог. Уже добавленные файлы остаются на прежних местах.',
-            ),
-          ],
-        ),
+        content: _SettingsContent(state: state),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
@@ -199,6 +200,184 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Содержимое диалога настроек: каталог коллекции + локальный HTTP-сервер.
+///
+/// Использует `StatefulWidget`, чтобы управлять полем ввода порта локально
+/// (без перерисовки всего диалога при наборе).
+class _SettingsContent extends StatefulWidget {
+  const _SettingsContent({required this.state});
+
+  final CollectionState state;
+
+  @override
+  State<_SettingsContent> createState() => _SettingsContentState();
+}
+
+class _SettingsContentState extends State<_SettingsContent> {
+  late final TextEditingController _portController;
+
+  @override
+  void initState() {
+    super.initState();
+    _portController = TextEditingController(
+      text: widget.state.httpServerPort.toString(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _portController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.state;
+    final running = state.isHttpServerRunning;
+    final url = state.httpServerUrl;
+    final error = state.httpServerError;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Корневой каталог коллекции',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          state.rootPath ?? 'Не задан',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Новые импортированные файлы будут сохраняться в выбранный '
+          'каталог. Уже добавленные файлы остаются на прежних местах.',
+        ),
+        const Divider(height: 32),
+
+        // ─────────── Локальный HTTP-сервер ───────────
+        Text(
+          'Локальный HTTP-сервер',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Позволяет расширению браузера и другим приложениям отправлять '
+          'файлы в «Коробку» одним кликом (как Eagle). Сервер слушает '
+          'только 127.0.0.1 — извне недоступен.',
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Switch.adaptive(
+              value: running,
+              onChanged: (v) => state.setHttpServerEnabled(v),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                running ? 'Запущен' : 'Выключен',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            SizedBox(
+              width: 90,
+              child: TextField(
+                controller: _portController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Порт',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onSubmitted: (value) {
+                  final p = int.tryParse(value);
+                  if (p != null) state.setHttpServerPort(p);
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.tonal(
+              onPressed: () {
+                final p = int.tryParse(_portController.text.trim());
+                if (p != null) state.setHttpServerPort(p);
+              },
+              child: const Text('Применить'),
+            ),
+          ],
+        ),
+        if (url != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    url,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                        ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Копировать URL',
+                  icon: const Icon(Icons.copy_outlined, size: 18),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: url));
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('URL сервера скопирован'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Пример: POST $url/api/item/add с { "name": "x.png", "base64": "..." }',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+        if (error != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.errorContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              error,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
