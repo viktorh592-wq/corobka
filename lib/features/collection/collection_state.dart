@@ -10,6 +10,7 @@ import '../../data/settings_repository.dart';
 import '../images/export_service.dart';
 import '../images/import_controller.dart';
 import '../images/video_thumbnail_service.dart';
+import '../server/local_http_server.dart';
 import 'collection_service.dart';
 
 /// Режимы просмотра коллекции.
@@ -77,6 +78,37 @@ class CollectionState extends ChangeNotifier {
   /// Пути исходных видеофайлов, для которых есть превью-кадр.
   /// Синхронный Set — карточки не делают дисковых проверок при сборке.
   final Set<String> _videoThumbnails = <String>{};
+
+  // ───────── ЛОКАЛЬНЫЙ HTTP-СЕРВЕР (прямой приём файлов) ─────────
+
+  /// Локальный HTTP-сервер (аналог Eagle для расширений браузера).
+  /// Запускается на 127.0.0.1:port, принимает base64/URL и импортирует
+  /// файлы в коллекцию одним кликом из внешних приложений.
+  LocalHttpServer? _httpServer;
+
+  /// Текущий настроенный порт сервера (по умолчанию 57323 как у Eagle).
+  int _httpServerPort = LocalHttpServer.kDefaultPort;
+  int get httpServerPort => _httpServerPort;
+
+  /// Запущен ли локальный HTTP-сервер.
+  bool get isHttpServerRunning => _httpServer?.isRunning ?? false;
+
+  /// Текстовая ошибка последнего запуска/остановки сервера, если есть.
+  String? _httpServerError;
+  String? get httpServerError => _httpServerError;
+
+  /// Сброс показанной ошибки сервера.
+  void clearHttpServerError() {
+    if (_httpServerError == null) return;
+    _httpServerError = null;
+    notifyListeners();
+  }
+
+  /// Полный URL локального сервера (для отображения в UI).
+  /// `null`, если сервер не запущен.
+  String? get httpServerUrl => _httpServer?.isRunning == true
+      ? 'http://127.0.0.1:${_httpServer!.actualPort ?? _httpServerPort}'
+      : null;
 
   /// Есть ли превью-кадр у видеофайла с путём [sourcePath].
   bool hasVideoThumbnail(String sourcePath) =>
@@ -221,11 +253,120 @@ class CollectionState extends ChangeNotifier {
 
       // Превью видео достраиваем в фоне — UI не ждёт декодирования.
       unawaited(_backfillVideoThumbnails());
+
+      // Восстанавливаем настройки локального HTTP-сервера и при включённом
+      // флаге запускаем его в фоне. Ошибки не роняют инициализацию.
+      await _initHttpServerFromSettings();
     } catch (e, stack) {
       debugPrint('initialize error: $e\n$stack');
       _lastError = 'Ошибка запуска: $e';
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Чтение сохранённых настроек HTTP-сервера и автозапуск, если включён.
+  Future<void> _initHttpServerFromSettings() async {
+    try {
+      final savedPort = await _settings.loadHttpServerPort();
+      if (savedPort != null && savedPort > 0 && savedPort < 65536) {
+        _httpServerPort = savedPort;
+      }
+      final enabled = await _settings.loadHttpServerEnabled();
+      if (enabled == true) {
+        await startHttpServer();
+      }
+    } catch (e) {
+      debugPrint('initHttpServerFromSettings error: $e');
+    }
+  }
+
+  /// Запуск локального HTTP-сервера. Если сервер уже запущен — ничего не делает.
+  /// Ошибка сохраняется в [httpServerError] и показывается пользователю.
+  Future<void> startHttpServer() async {
+    if (isHttpServerRunning) return;
+    try {
+      _httpServerError = null;
+      final server = LocalHttpServer(
+        collection: _service,
+        port: _httpServerPort,
+        onItemAdded: _onExternalItemAdded,
+      );
+      await server.start();
+      _httpServer = server;
+      notifyListeners();
+    } catch (e, stack) {
+      debugPrint('startHttpServer error: $e\n$stack');
+      _httpServerError = 'Не удалось запустить сервер: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Остановка локального HTTP-сервера.
+  Future<void> stopHttpServer() async {
+    final server = _httpServer;
+    if (server == null) return;
+    try {
+      await server.stop();
+    } catch (e) {
+      _httpServerError = 'Не удалось остановить сервер: $e';
+    } finally {
+      _httpServer = null;
+      notifyListeners();
+    }
+  }
+
+  /// Включение/выключение локального HTTP-сервера с сохранением настройки.
+  Future<void> setHttpServerEnabled(bool enabled) async {
+    try {
+      await _settings.saveHttpServerEnabled(enabled);
+    } catch (e) {
+      debugPrint('saveHttpServerEnabled error: $e');
+    }
+    if (enabled) {
+      await startHttpServer();
+    } else {
+      await stopHttpServer();
+    }
+  }
+
+  /// Изменение порта локального HTTP-сервера. Если сервер запущен —
+  /// перезапускает его на новом порту.
+  Future<void> setHttpServerPort(int port) async {
+    if (port <= 0 || port >= 65536) {
+      _httpServerError = 'Порт должен быть в диапазоне 1–65535';
+      notifyListeners();
+      return;
+    }
+    _httpServerPort = port;
+    try {
+      await _settings.saveHttpServerPort(port);
+    } catch (e) {
+      debugPrint('saveHttpServerPort error: $e');
+    }
+    if (isHttpServerRunning) {
+      await stopHttpServer();
+      await startHttpServer();
+    } else {
+      notifyListeners();
+    }
+  }
+
+  /// Колбэк из [LocalHttpServer] — внешний клиент прислал файл(ы).
+  /// Перечитаем список (с фильтрами) и счётчики, чтобы карточка появилась
+  /// в UI немедленно. Запускаем без ожидания — сервер не должен задерживать
+  /// ответ HTTP-клиенту.
+  void _onExternalItemAdded(int? folderId) {
+    unawaited(_reloadAfterExternalImport());
+  }
+
+  Future<void> _reloadAfterExternalImport() async {
+    try {
+      _items = _applySort(await _loadItems());
+      _folderCounts = await _service.countByFolder();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('reloadAfterExternalImport error: $e');
     }
   }
 
@@ -795,6 +936,10 @@ class CollectionState extends ChangeNotifier {
   void dispose() {
     _importController.removeListener(_onImportProgress);
     _importController.dispose();
+    // Останавливаем локальный HTTP-сервер — иначе сокет останется висеть
+    // до завершения процесса, а при горячей перезагрузке будет конфликт
+    // порта при следующем запуске.
+    _httpServer?.stop();
     super.dispose();
   }
 }

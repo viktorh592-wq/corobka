@@ -12,6 +12,8 @@ class SettingsRepository {
   static const _kThumbnailExtent = 'thumbnail_extent';
   static const _kLeftPanelWidth = 'left_panel_width';
   static const _kRightPanelWidth = 'right_panel_width';
+  static const _kHttpServerEnabled = 'http_server_enabled';
+  static const _kHttpServerPort = 'http_server_port';
 
   /// Сохранение режима темы.
   Future<void> saveThemeMode(String mode) async {
@@ -95,5 +97,32 @@ class SettingsRepository {
   Future<double?> loadRightPanelWidth() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getDouble(_kRightPanelWidth);
+  }
+
+  /// Сохранение флага автозапуска локального HTTP-сервера коллекции
+  /// (для приёма файлов от расширений браузера и сторонних приложений).
+  Future<void> saveHttpServerEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kHttpServerEnabled, enabled);
+  }
+
+  /// Чтение флага автозапуска HTTP-сервера. `null`, если значение не задано
+  /// (по умолчанию сервер выключен — пользователь включает его в настройках).
+  Future<bool?> loadHttpServerEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_kHttpServerEnabled);
+  }
+
+  /// Сохранение порта локального HTTP-сервера.
+  Future<void> saveHttpServerPort(int port) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kHttpServerPort, port);
+  }
+
+  /// Чтение порта HTTP-сервера. `null`, если не задан
+  /// (используется [LocalHttpServer.kDefaultPort]).
+  Future<int?> loadHttpServerPort() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_kHttpServerPort);
   }
 }
