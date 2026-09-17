@@ -1,9 +1,11 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../data/settings_repository.dart';
 import '../features/collection/collection_state.dart';
+import '../features/logging/log_service.dart';
 import '../features/settings/theme_provider.dart';
 import '../widgets/app_dialog.dart';
 import '../widgets/content_area.dart';
@@ -103,6 +105,14 @@ class _MainScreenState extends State<MainScreen> {
             context.read<CollectionState>().trashItem(item);
           }
         },
+        // Выделить все элементы текущего списка.
+        const SingleActivator(LogicalKeyboardKey.keyA, control: true): () {
+          context.read<CollectionState>().selectAllItems();
+        },
+        // Снять массовое выделение.
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          context.read<CollectionState>().clearMultiSelection();
+        },
       },
       child: Focus(
         autofocus: true,
@@ -151,7 +161,8 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  /// Диалог настроек: корневой каталог коллекции (как папка библиотеки Eagle).
+  /// Диалог настроек: корневой каталог коллекции (как папка библиотеки
+  /// Eagle) + управление журналом событий (логом) приложения и плагина.
   Future<void> _openSettings(BuildContext context) async {
     final state = context.read<CollectionState>();
 
@@ -177,6 +188,11 @@ class _MainScreenState extends State<MainScreen> {
               'Новые импортированные файлы будут сохраняться в выбранный '
               'каталог. Уже добавленные файлы остаются на прежних местах.',
             ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            // ── Журнал (лог) приложения и плагина ──
+            _LogSection(messenger: ScaffoldMessenger.of(dialogContext)),
           ],
         ),
         actions: [
@@ -200,5 +216,123 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Секция управления журналом в настройках.
+///
+/// Кнопки «Начать запись» / «Остановить запись» / «Выгрузить лог».
+/// В журнал пишутся события и приложения, и расширения браузера:
+/// логи плагина приходят через локальный HTTP-сервер (POST /api/log)
+/// и помечаются в файле меткой [plugin].
+class _LogSection extends StatelessWidget {
+  const _LogSection({required this.messenger});
+
+  final ScaffoldMessengerState messenger;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: LogService.instance,
+      builder: (context, _) {
+        final log = LogService.instance;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Журнал (лог)',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(
+                  log.isRecording
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                  size: 14,
+                  color: log.isRecording
+                      ? Theme.of(context).colorScheme.error
+                      : Theme.of(context).colorScheme.outline,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    log.isRecording
+                        ? 'Запись ведётся (приложение + плагин)'
+                        : 'Запись остановлена',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+            if (log.isRecording && log.logFilePath != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                log.logFilePath!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                if (!log.isRecording)
+                  FilledButton.tonalIcon(
+                    icon: const Icon(Icons.fiber_manual_record, size: 16),
+                    label: const Text('Начать запись'),
+                    onPressed: () => LogService.instance.start(),
+                  )
+                else
+                  FilledButton.tonalIcon(
+                    icon: const Icon(Icons.stop, size: 16),
+                    label: const Text('Остановить запись'),
+                    onPressed: () => LogService.instance.stop(),
+                  ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.file_download_outlined, size: 16),
+                  label: const Text('Выгрузить лог'),
+                  onPressed: () => _exportLog(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'В лог пишутся события приложения и расширения браузера '
+              'одновременно. Выгрузка сохраняет текущий журнал в файл.',
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Сохранение журнала в файл, выбранный пользователем.
+  Future<void> _exportLog(BuildContext context) async {
+    try {
+      final path = await LogService.instance.export(
+        pickPath: (defaultName) async {
+          final result = await FilePicker.platform.saveFile(
+            dialogTitle: 'Выгрузить лог',
+            fileName: defaultName,
+          );
+          // На некоторых платформах saveFile возвращает имя без пути —
+          // тогда используем его как есть (плагин сам даёт полный путь).
+          return result;
+        },
+      );
+      if (path == null) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Лог сохранён: $path')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Не удалось сохранить лог: $e')),
+      );
+    }
   }
 }

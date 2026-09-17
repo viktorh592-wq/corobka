@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/models/folder.dart';
 import '../../data/models/item.dart';
@@ -10,6 +12,7 @@ import '../../data/settings_repository.dart';
 import '../images/export_service.dart';
 import '../images/import_controller.dart';
 import '../images/video_thumbnail_service.dart';
+import '../logging/log_service.dart';
 import 'collection_service.dart';
 
 /// Режимы просмотра коллекции.
@@ -92,8 +95,15 @@ class CollectionState extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   /// Последнее сообщение об ошибке (для SnackBar в UI). `null` — ошибок нет.
+  /// Присвоение ненулевого значения фиксируется в журнале (LogService).
   String? _lastError;
   String? get lastError => _lastError;
+  set lastError(String? value) {
+    _lastError = value;
+    if (value != null) {
+      LogService.instance.add('ERROR', value);
+    }
+  }
 
   /// Сбрасывает показанную ошибку.
   void clearError() {
@@ -439,6 +449,9 @@ class CollectionState extends ChangeNotifier {
     _selectedItem = null;
     _selectedItemTags = const [];
     _filterTagId = null;
+    // Массовое выделение сбрасываем — идентификаторы другого списка.
+    _multiSelectedIds.clear();
+    _multiSelectAnchorId = null;
     notifyListeners();
     await _loadItemsAndNotify();
   }
@@ -460,6 +473,123 @@ class CollectionState extends ChangeNotifier {
     _selectedItem = item;
     _selectedItemTags = await _service.getTagsForItem(item.id);
     notifyListeners();
+  }
+
+  // ─────────────────────── МАССОВОЕ ВЫДЕЛЕНИЕ ───────────────────────
+
+  /// Идентификаторы выбранных элементов (Ctrl/Shift-клик, Ctrl+A).
+  final Set<int> _multiSelectedIds = <int>{};
+
+  /// «Якорь» для диапазонного выделения по Shift.
+  int? _multiSelectAnchorId;
+
+  /// Идентификаторы выбранных элементов (только для чтения).
+  Set<int> get multiSelectedIds => Set.unmodifiable(_multiSelectedIds);
+
+  /// Есть ли активное массовое выделение.
+  bool get hasMultiSelection => _multiSelectedIds.isNotEmpty;
+
+  /// Выбран ли элемент в массовом выделении.
+  bool isMultiSelected(CollectionItem item) =>
+      _multiSelectedIds.contains(item.id);
+
+  /// Обработка клика по карточке с учётом модификаторов (Ctrl/Shift).
+  ///
+  ///  - обычный клик: сброс выделения + выбор элемента (как раньше);
+  ///  - Ctrl+клик: добавить/убрать элемент из выделения;
+  ///  - Shift+клик: выделить диапазон от «якоря» до элемента.
+  void handleCardTap(CollectionItem item) {
+    final ctrl = HardwareKeyboard.instance.isControlPressed;
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+
+    if (ctrl && !shift) {
+      if (!_multiSelectedIds.remove(item.id)) {
+        _multiSelectedIds.add(item.id);
+      }
+      _multiSelectAnchorId ??= item.id;
+      notifyListeners();
+      return;
+    }
+
+    if (shift) {
+      final anchor = _multiSelectAnchorId ?? item.id;
+      final a = _items.indexWhere((e) => e.id == anchor);
+      final b = _items.indexWhere((e) => e.id == item.id);
+      if (a >= 0 && b >= 0) {
+        _multiSelectedIds
+          ..clear()
+          ..addAll([
+            for (var i = math.min(a, b); i <= math.max(a, b); i++)
+              _items[i].id,
+          ]);
+        notifyListeners();
+      }
+      return;
+    }
+
+    // Обычный клик: если было массовое выделение — снимаем его.
+    if (_multiSelectedIds.isNotEmpty) {
+      _multiSelectedIds.clear();
+      notifyListeners();
+    }
+    selectItem(item);
+  }
+
+  /// Выделить все элементы текущего списка (Ctrl+A).
+  void selectAllItems() {
+    if (_items.isEmpty) return;
+    _multiSelectAnchorId ??= _items.first.id;
+    _multiSelectedIds
+      ..clear()
+      ..addAll([for (final item in _items) item.id]);
+    notifyListeners();
+  }
+
+  /// Снять массовое выделение.
+  void clearMultiSelection() {
+    if (_multiSelectedIds.isEmpty) return;
+    _multiSelectAnchorId = null;
+    _multiSelectedIds.clear();
+    notifyListeners();
+  }
+
+  /// Перемещение набора элементов в папку (null — в корень коллекции).
+  Future<void> moveItemsToFolder(List<int> ids, int? folderId) async {
+    if (ids.isEmpty) return;
+    for (final id in ids) {
+      try {
+        await _service.moveItemToFolder(id, folderId);
+      } catch (e) {
+        debugPrint('moveItemsToFolder: элемент $id — ошибка: $e');
+      }
+    }
+    _multiSelectedIds.clear();
+    _multiSelectAnchorId = null;
+    if (_selectedItem != null && ids.contains(_selectedItem!.id)) {
+      _selectedItem =
+          _selectedItem!.copyWith(folderId: folderId, clearFolderId: folderId == null);
+    }
+    await _loadItemsAndNotify();
+  }
+
+  /// Перемещение выделенных элементов в корзину.
+  Future<void> trashSelectedItems() async {
+    if (_multiSelectedIds.isEmpty) return;
+    final ids = _multiSelectedIds.toList();
+    for (final id in ids) {
+      try {
+        await _service.moveItemToTrash(id);
+      } catch (e) {
+        debugPrint('trashSelectedItems: элемент $id — ошибка: $e');
+      }
+    }
+    if (_selectedItem != null && ids.contains(_selectedItem!.id)) {
+      _selectedItem = null;
+      _selectedItemTags = const [];
+    }
+    _multiSelectedIds.clear();
+    _multiSelectAnchorId = null;
+    await _load();
   }
 
   // ─────────────────────────── ПАПКИ ───────────────────────────

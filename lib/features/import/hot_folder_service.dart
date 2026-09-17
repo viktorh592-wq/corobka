@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../collection/collection_state.dart';
 import '../images/image_service.dart';
+import '../logging/log_service.dart';
 
 /// Папка-приёмник для расширения браузера.
 ///
@@ -182,8 +183,12 @@ class HotFolderService {
     final state = _state!;
     try {
       await state.importExternalFiles([path], folderId: folderId);
+      LogService.instance
+          .add('INFO', 'Импортирован файл из папки-приёмника: $path');
     } catch (e) {
       debugPrint('HotFolder: импорт не удался ($path): $e');
+      LogService.instance
+          .add('ERROR', 'Импорт не удался ($path): $e');
       _failedPaths.add(path);
       return;
     }
@@ -194,6 +199,8 @@ class HotFolderService {
       debugPrint('HotFolder: импортирован и удалён: $path');
     } catch (e) {
       debugPrint('HotFolder: не удалось удалить файл ($path): $e');
+      LogService.instance
+          .add('WARN', 'Не удалось удалить исходник ($path): $e');
       _failedPaths.add(path);
     }
   }

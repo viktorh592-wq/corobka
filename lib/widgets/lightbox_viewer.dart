@@ -47,6 +47,13 @@ class _LightboxViewerState extends State<LightboxViewer> {
   double _gestureBaseScale = 1.0;
   Offset _gestureBaseOffset = Offset.zero;
 
+  // Панорамирование зажатой ЛКМ: обрабатывается на «сырых» pointer-событиях,
+  // которые приходят от мыши гарантированно (в отличие от scale-жеста,
+  // ограниченного площадью исходного изображения).
+  bool _panning = false;
+  Offset _panStartOffset = Offset.zero;
+  Offset _panStartPointer = Offset.zero;
+
   @override
   void initState() {
     super.initState();
@@ -160,7 +167,31 @@ class _LightboxViewerState extends State<LightboxViewer> {
                 );
                 // Listener растягивается на всю зону — колесо работает
                 // в любой точке экрана, а не только над картинкой.
+                // Панорамирование (зажать ЛКМ и тянуть) тоже обрабатывается
+                // здесь — на сырых pointer-событиях, поэтому работает из
+                // любой точки увеличенного изображения.
                 return Listener(
+                  onPointerDown: (event) {
+                    // Левая кнопка мыши (или палец) + увеличенное изображение.
+                    if (event.buttons & kPrimaryMouseButton != 0 &&
+                        _scale > _minScale) {
+                      _panning = true;
+                      _panStartOffset = _offset;
+                      _panStartPointer = event.localPosition;
+                    }
+                  },
+                  onPointerMove: (event) {
+                    if (!_panning) return;
+                    setState(() {
+                      _offset = _clampedOffset(
+                        _panStartOffset +
+                            (event.localPosition - _panStartPointer),
+                        areaSize,
+                      );
+                    });
+                  },
+                  onPointerUp: (_) => _panning = false,
+                  onPointerCancel: (_) => _panning = false,
                   onPointerSignal: (event) {
                     if (event is PointerScrollEvent) {
                       // Один «щелчок» колеса ≈ ±25% масштаба.
@@ -168,37 +199,45 @@ class _LightboxViewerState extends State<LightboxViewer> {
                       _zoomAtPoint(event.localPosition, delta, areaSize);
                     }
                   },
-                  child: SizedBox(
-                    width: constraints.maxWidth,
-                    height: constraints.maxHeight,
-                    // Центр задаёт изображению границы зоны просмотра.
-                    child: Center(
-                      child: GestureDetector(
-                        onScaleStart: (details) {
-                          // Запоминаем состояние — масштаб сохраняется при drag.
-                          _gestureBaseScale = _scale;
-                          _gestureBaseOffset = _offset;
-                        },
-                        onScaleUpdate: (details) {
-                          if (_scale <= _minScale && details.scale == 1.0) {
-                            // На 100% панорамирование не нужно (как в Windows).
-                            return;
-                          }
-                          setState(() {
-                            _scale = (_gestureBaseScale * details.scale)
-                                .clamp(_minScale, _maxScale);
-                            _offset = _clampedOffset(
-                              _gestureBaseOffset + details.focalPointDelta,
-                              areaSize,
-                            );
-                          });
-                        },
-                        onDoubleTap: () => _setScale(_minScale),
-                        child: Transform.translate(
-                          offset: _offset,
-                          child: Transform.scale(
-                            scale: _scale,
-                            child: _ImagePreview(path: _current.path),
+                  child: MouseRegion(
+                    // Подсказка пользователю: изображение можно тащить.
+                    cursor: _scale > _minScale
+                        ? SystemMouseCursors.move
+                        : MouseCursor.defer,
+                    child: SizedBox(
+                      width: constraints.maxWidth,
+                      height: constraints.maxHeight,
+                      // Центр задаёт изображению границы зоны просмотра.
+                      child: Center(
+                        child: GestureDetector(
+                          // Масштаб двумя пальцами (pinch). Панорамирование
+                          // одним пальцем/мышью — в Listener выше: жест
+                          // scale с одним указателем не покрывает всю
+                          // увеличенную область и «терял» перетаскивание.
+                          onScaleStart: (details) {
+                            if (details.pointerCount >= 2) {
+                              _gestureBaseScale = _scale;
+                              _gestureBaseOffset = _offset;
+                            }
+                          },
+                          onScaleUpdate: (details) {
+                            if (details.pointerCount < 2) return;
+                            setState(() {
+                              _scale = (_gestureBaseScale * details.scale)
+                                  .clamp(_minScale, _maxScale);
+                              _offset = _clampedOffset(
+                                _gestureBaseOffset + details.focalPointDelta,
+                                areaSize,
+                              );
+                            });
+                          },
+                          onDoubleTap: () => _setScale(_minScale),
+                          child: Transform.translate(
+                            offset: _offset,
+                            child: Transform.scale(
+                              scale: _scale,
+                              child: _ImagePreview(path: _current.path),
+                            ),
                           ),
                         ),
                       ),

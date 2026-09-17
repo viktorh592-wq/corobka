@@ -70,6 +70,9 @@ class _ToolbarState extends State<_Toolbar> {
   late final TextEditingController _searchController;
   Timer? _debounce;
 
+  /// Ключ кнопки сортировки — меню открывается прямо под ней.
+  final GlobalKey _sortButtonKey = GlobalKey();
+
   /// Палитра цветов для быстрой фильтрации.
   static const _palette = <(String, Color)>[
     ('FF5722', Color(0xFFFF5722)), // оранжевый
@@ -116,16 +119,33 @@ class _ToolbarState extends State<_Toolbar> {
   }
 
   /// Выбор режима сортировки (как в Eagle — выпадающее меню).
+  ///
+  /// Меню открывается строго под кнопкой сортировки (позиция берётся
+  /// из рендер-объекта кнопки, а не «на глаз» по координатам экрана).
   Future<void> _pickSortMode(BuildContext context) async {
     final state = widget.state;
+    final buttonBox = _sortButtonKey.currentContext?.findRenderObject();
+    final overlayBox =
+        Overlay.of(context).context.findRenderObject();
+
+    RelativeRect position = RelativeRect.fill;
+    if (buttonBox is RenderBox && overlayBox is RenderBox) {
+      final topLeft =
+          buttonBox.localToGlobal(Offset.zero, ancestor: overlayBox);
+      position = RelativeRect.fromRect(
+        Rect.fromLTWH(
+          topLeft.dx,
+          topLeft.dy + buttonBox.size.height + 4,
+          buttonBox.size.width + 120,
+          8,
+        ),
+        Offset.zero & overlayBox.size,
+      );
+    }
+
     final selected = await showMenu<SortMode>(
       context: context,
-      position: RelativeRect.fromLTRB(
-        MediaQuery.sizeOf(context).width - 260,
-        90,
-        16,
-        0,
-      ),
+      position: position,
       items: [
         for (final mode in SortMode.values)
           CheckedPopupMenuItem(
@@ -319,6 +339,7 @@ class _ToolbarState extends State<_Toolbar> {
                       ),
                       const SizedBox(width: 8),
                       IconButton(
+                        key: _sortButtonKey,
                         tooltip: state.sortMode.label,
                         icon: const Icon(Icons.sort_outlined),
                         onPressed: () => _pickSortMode(context),
@@ -428,20 +449,318 @@ class _ItemGrid extends StatelessWidget {
       );
     }
 
+    Widget view;
     switch (state.viewMode) {
       case ViewMode.grid:
-        return _GridView(
+        view = _GridView(
           items: state.items,
           extent: state.thumbnailExtent,
         );
       case ViewMode.masonry:
-        return _MasonryView(
+        view = _MasonryView(
           items: state.items,
           extent: state.thumbnailExtent,
         );
       case ViewMode.list:
-        return _ListView(items: state.items);
+        view = _ListView(items: state.items);
     }
+
+    // Панель массового выделения поверх списка (Ctrl/Shift/Ctrl+A).
+    return Column(
+      children: [
+        if (state.hasMultiSelection) _SelectionBar(state: state),
+        Expanded(child: view),
+      ],
+    );
+  }
+}
+
+/// Панель действий над выделенными элементами.
+class _SelectionBar extends StatelessWidget {
+  const _SelectionBar({required this.state});
+
+  final CollectionState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = state.multiSelectedIds.length;
+    final isTrash = state.isTrashView;
+
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.secondaryContainer,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.checklist,
+            size: 18,
+            color: Theme.of(context).colorScheme.onSecondaryContainer,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Выбрано: $count',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+                ),
+          ),
+          const Spacer(),
+          if (!isTrash) ...[
+            TextButton.icon(
+              onPressed: () => _moveSelected(context),
+              icon: const Icon(Icons.drive_file_move_outlined, size: 18),
+              label: const Text('Переместить в папку'),
+            ),
+            const SizedBox(width: 4),
+            TextButton.icon(
+              onPressed: () => state.trashSelectedItems(),
+              icon: Icon(
+                Icons.delete_outline,
+                size: 18,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              label: Text(
+                'В корзину',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
+          TextButton(
+            onPressed: state.clearMultiSelection,
+            child: const Text('Снять выделение'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Диалог выбора папки для перемещения выделенных элементов.
+  Future<void> _moveSelected(BuildContext context) async {
+    final folderId = await showMoveToFolderPicker(context, state);
+    if (folderId == null || !context.mounted) return;
+    await state.moveItemsToFolder(
+      state.multiSelectedIds.toList(),
+      folderId == -1 ? null : folderId,
+    );
+  }
+}
+
+/// Общий диалог «Переместить в папку» с поиском по папкам.
+///
+/// Возвращает идентификатор папки, -1 (корень) или null (отмена).
+Future<int?> showMoveToFolderPicker(
+  BuildContext context,
+  CollectionState state,
+) {
+  return showDialog<int?>(
+    context: context,
+    builder: (dialogContext) {
+      final queryController = TextEditingController();
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          final query = queryController.text.trim().toLowerCase();
+          final folders = query.isEmpty
+              ? state.folders
+              : state.folders
+                  .where((f) => f.name.toLowerCase().contains(query))
+                  .toList();
+
+          return AppDialog(
+            title: 'Переместить в папку',
+            content: SizedBox(
+              width: 300,
+              height: 360,
+              child: Column(
+                children: [
+                  // ── Поиск по папкам ──
+                  TextField(
+                    controller: queryController,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: 'Поиск папки...',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      suffixIcon: query.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close, size: 18),
+                              onPressed: () {
+                                setDialogState(() => queryController.clear());
+                              },
+                            ),
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: folders.isEmpty
+                        ? Center(
+                            child: Text(
+                              'Папки не найдены',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context).colorScheme.outline,
+                                  ),
+                            ),
+                          )
+                        : ListView(
+                            shrinkWrap: false,
+                            children: [
+                              if (query.isEmpty)
+                                ListTile(
+                                  dense: true,
+                                  leading:
+                                      const Icon(Icons.folder_off_outlined),
+                                  title: const Text('Без папки (корень)'),
+                                  onTap: () =>
+                                      Navigator.pop(dialogContext, -1),
+                                ),
+                              for (final folder in folders)
+                                Builder(builder: (context) {
+                                  final count =
+                                      state.folderCounts[folder.id] ?? 0;
+                                  return ListTile(
+                                    dense: true,
+                                    leading: FolderIcon(
+                                      colorHex: folder.color,
+                                      size: 20,
+                                    ),
+                                    title: Text(folder.name),
+                                    trailing: count > 0
+                                        ? Text(
+                                            '$count',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .outline,
+                                                ),
+                                          )
+                                        : null,
+                                    onTap: () => Navigator.pop(
+                                        dialogContext, folder.id),
+                                  );
+                                }),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+/// Перетаскиваемая карточка элемента: тянет одиночный элемент
+/// или всё массовое выделение (если элемент входит в него).
+class _ItemDraggable extends StatelessWidget {
+  const _ItemDraggable({required this.item, required this.child});
+
+  final CollectionItem item;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<CollectionState>();
+
+    // Из корзины перетаскивать нечего.
+    if (state.isTrashView) return child;
+
+    final ids = state.isMultiSelected(item)
+        ? state.multiSelectedIds.toList()
+        : <int>[item.id];
+
+    return Draggable<List<int>>(
+      data: ids,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: _DragFeedback(
+        count: ids.length,
+        thumbnailPath: item.isImage ? item.path : null,
+      ),
+      childWhenDragging: Opacity(opacity: 0.4, child: child),
+      child: child,
+    );
+  }
+}
+
+/// «Отзыв» при перетаскивании: превью + счётчик выбранных файлов.
+class _DragFeedback extends StatelessWidget {
+  const _DragFeedback({required this.count, this.thumbnailPath});
+
+  final int count;
+  final String? thumbnailPath;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: 88,
+        height: 88,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.primary,
+            width: 2,
+          ),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        ),
+        child: Stack(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox.expand(
+                child: thumbnailPath != null
+                    ? Image.file(
+                        File(thumbnailPath!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            const Icon(Icons.image_outlined),
+                      )
+                    : const Icon(Icons.image_outlined),
+              ),
+            ),
+            if (count > 1)
+              Positioned(
+                right: 4,
+                bottom: 4,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -530,9 +849,11 @@ class _ItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<CollectionState>();
     final selected = state.selectedItem?.id == item.id;
+    final multiSelected = state.isMultiSelected(item);
+    final highlighted = selected || multiSelected;
 
-    return GestureDetector(
-      onTap: () => state.selectItem(item),
+    final card = GestureDetector(
+      onTap: () => state.handleCardTap(item),
       onDoubleTap: () => _openLightbox(context, state),
       onSecondaryTapUp: (details) =>
           _showContextMenu(context, state, details.globalPosition),
@@ -540,10 +861,10 @@ class _ItemCard extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: selected
+            color: highlighted
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).colorScheme.outlineVariant,
-            width: selected ? 2 : 1,
+            width: highlighted ? 2 : 1,
           ),
         ),
         child: Column(
@@ -585,6 +906,9 @@ class _ItemCard extends StatelessWidget {
         ),
       ),
     );
+
+    // Карточку можно перетащить в папку (одиночную или всё выделение).
+    return _ItemDraggable(item: item, child: card);
   }
 
   /// Пропорции файла для masonry-режима (fallback 1:1 без метаданных).
@@ -648,18 +972,40 @@ class _ItemCard extends StatelessWidget {
   }
 
   /// Контекстное меню карточки (правая кнопка мыши) — как в Eagle.
+  ///
+  /// Меню открывается строго под курсором: границы RelativeRect
+  /// рассчитываются от курсора до краёв экрана, а не «16 px от края»
+  /// (из-за фиксированных границ меню раньше улетало в сторону).
+  /// Если элемент входит в массовое выделение — пункты действуют
+  /// на всё выделение.
   Future<void> _showContextMenu(
     BuildContext context,
     CollectionState state,
     Offset position,
   ) async {
-    await state.selectItem(item);
+    final multiSelected = state.isMultiSelected(item);
+    final selectionCount = state.multiSelectedIds.length;
+    final actOnSelection = multiSelected && selectionCount > 1;
+
+    // Считаем позицию меню ДО await — context не «протухает».
+    final overlayBox =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final screenSize = overlayBox?.size ?? MediaQuery.sizeOf(context);
+
+    if (!actOnSelection) {
+      await state.selectItem(item);
+    }
     if (!context.mounted) return;
 
     final isTrash = state.isTrashView;
     final action = await showMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(position.dx, position.dy, 16, 16),
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        (screenSize.width - position.dx).clamp(0, screenSize.width),
+        (screenSize.height - position.dy).clamp(0, screenSize.height),
+      ),
       items: [
         const PopupMenuItem(
           value: 'open',
@@ -684,13 +1030,31 @@ class _ItemCard extends StatelessWidget {
             ),
           ),
         if (!isTrash)
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'move',
             child: ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.drive_file_move_outlined),
-              title: Text('Переместить в папку...'),
+              leading: const Icon(Icons.drive_file_move_outlined),
+              title: Text(actOnSelection
+                  ? 'Переместить выбранные ($selectionCount) в папку...'
+                  : 'Переместить в папку...'),
+            ),
+          ),
+        if (!isTrash && actOnSelection)
+          PopupMenuItem(
+            value: 'trashSelection',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.delete_outline,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                'Удалить выбранные ($selectionCount)',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ),
           ),
         if (isTrash)
@@ -730,7 +1094,18 @@ class _ItemCard extends StatelessWidget {
       case 'favorite':
         await state.toggleFavorite(item);
       case 'move':
-        await _moveToFolderDialog(context, state);
+        if (actOnSelection) {
+          final folderId = await showMoveToFolderPicker(context, state);
+          if (folderId == null || !context.mounted) return;
+          await state.moveItemsToFolder(
+            state.multiSelectedIds.toList(),
+            folderId == -1 ? null : folderId,
+          );
+        } else {
+          await _moveToFolderDialog(context, state);
+        }
+      case 'trashSelection':
+        await state.trashSelectedItems();
       case 'trash':
         await state.trashItem(item);
       case 'restore':
@@ -749,114 +1124,7 @@ class _ItemCard extends StatelessWidget {
     BuildContext context,
     CollectionState state,
   ) async {
-    final selected = await showDialog<int?>(
-      context: context,
-      builder: (dialogContext) {
-        final queryController = TextEditingController();
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final query = queryController.text.trim().toLowerCase();
-            final folders = query.isEmpty
-                ? state.folders
-                : state.folders
-                    .where((f) => f.name.toLowerCase().contains(query))
-                    .toList();
-
-            return AppDialog(
-              title: 'Переместить в папку',
-              content: SizedBox(
-                width: 300,
-                height: 360,
-                child: Column(
-                  children: [
-                    // ── Поиск по папкам ──
-                    TextField(
-                      controller: queryController,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        hintText: 'Поиск папки...',
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        suffixIcon: query.isEmpty
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.close, size: 18),
-                                onPressed: () {
-                                  setDialogState(() => queryController.clear());
-                                },
-                              ),
-                        isDense: true,
-                        border: const OutlineInputBorder(),
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: folders.isEmpty
-                          ? Center(
-                              child: Text(
-                                'Папки не найдены',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .outline,
-                                    ),
-                              ),
-                            )
-                          : ListView(
-                              shrinkWrap: false,
-                              children: [
-                                if (query.isEmpty)
-                                  ListTile(
-                                    dense: true,
-                                    leading:
-                                        const Icon(Icons.folder_off_outlined),
-                                    title:
-                                        const Text('Без папки (корень)'),
-                                    onTap: () =>
-                                        Navigator.pop(dialogContext, -1),
-                                  ),
-                                for (final folder in folders)
-                                  Builder(builder: (context) {
-                                    final count =
-                                        state.folderCounts[folder.id] ?? 0;
-                                    return ListTile(
-                                      dense: true,
-                                      leading: FolderIcon(
-                                        colorHex: folder.color,
-                                        size: 20,
-                                      ),
-                                      title: Text(folder.name),
-                                      trailing: count > 0
-                                          ? Text(
-                                              '$count',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .outline,
-                                                  ),
-                                            )
-                                          : null,
-                                      onTap: () => Navigator.pop(
-                                          dialogContext, folder.id),
-                                    );
-                                  }),
-                              ],
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
+    final selected = await showMoveToFolderPicker(context, state);
 
     if (selected == null) return;
     await state.moveItemToFolder(selected == -1 ? null : selected);
@@ -908,9 +1176,11 @@ class _ItemListRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<CollectionState>();
     final selected = state.selectedItem?.id == item.id;
+    final multiSelected = state.isMultiSelected(item);
+    final highlighted = selected || multiSelected;
 
-    return GestureDetector(
-      onTap: () => state.selectItem(item),
+    final row = GestureDetector(
+      onTap: () => state.handleCardTap(item),
       onDoubleTap: () {
         Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -924,12 +1194,12 @@ class _ItemListRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: selected
+          color: highlighted
               ? Theme.of(context).colorScheme.secondaryContainer
               : null,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: selected
+            color: highlighted
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).colorScheme.outlineVariant,
           ),
@@ -1008,6 +1278,9 @@ class _ItemListRow extends StatelessWidget {
         ),
       ),
     );
+
+    // Строку списка тоже можно перетащить в папку.
+    return _ItemDraggable(item: item, child: row);
   }
 
   String _formatDate(int seconds) {

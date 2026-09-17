@@ -549,7 +549,10 @@ class _SystemTile extends StatelessWidget {
     final state = context.watch<CollectionState>();
     final selected = state.selectedFolderId == id;
 
-    return ListTile(
+    // Раздел «Все» — приёмник перетаскивания (перемещение в корень).
+    final isRootTarget = id == 'all' && !state.isTrashView;
+
+    final tile = ListTile(
       dense: true,
       // Иконки в акцентном цвете элементов управления — единый стиль UI.
       leading: Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
@@ -571,6 +574,30 @@ class _SystemTile extends StatelessWidget {
       selected: selected,
       selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
       onTap: () => state.selectFolder(id),
+    );
+
+    if (!isRootTarget) return tile;
+
+    return DragTarget<List<int>>(
+      onWillAcceptWithDetails: (details) => true,
+      onAcceptWithDetails: (details) => state.moveItemsToFolder(
+        details.data,
+        null,
+      ),
+      builder: (context, candidate, _) {
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: candidate.isNotEmpty
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: tile,
+        );
+      },
     );
   }
 }
@@ -620,74 +647,108 @@ class _FolderTileState extends State<_FolderTile> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Сама плитка папки.
+        // Сама плитка папки: принимает перетаскиваемые элементы
+        // (одиночные или массовое выделение) и открывает меню у курсора.
         GestureDetector(
-          onSecondaryTapUp: (details) => _showMenu(context, state),
-          child: Padding(
-            padding: EdgeInsets.only(left: widget.level * 12.0),
-            child: ListTile(
-              dense: true,
-              leading: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Шеврон раскрытия: виден только если есть дочерние папки.
-                  if (hasChildren)
-                    InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () => setState(() => _expanded = !_expanded),
-                      child: Padding(
-                        padding: const EdgeInsets.all(2),
-                        child: Icon(
-                          expanded
-                              ? Icons.expand_more
-                              : Icons.chevron_right,
-                          size: 18,
+          onSecondaryTapUp: (details) =>
+              _showMenu(context, state, details.globalPosition),
+          onLongPressStart: (details) =>
+              _showMenu(context, state, details.globalPosition),
+          child: DragTarget<List<int>>(
+            onWillAcceptWithDetails: (details) => !state.isTrashView,
+            onAcceptWithDetails: (details) =>
+                state.moveItemsToFolder(details.data, widget.folder.id),
+            builder: (context, candidate, _) {
+              final active = candidate.isNotEmpty;
+              return Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  // Подсветка папки — сюда можно бросить выделенные файлы.
+                  color: active
+                      ? Theme.of(context)
+                          .colorScheme
+                          .primaryContainer
+                          .withValues(alpha: 0.55)
+                      : null,
+                  border: Border.all(
+                    color: active
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.only(left: widget.level * 12.0),
+                  child: ListTile(
+                    dense: true,
+                    leading: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Шеврон раскрытия: виден только если есть дочерние папки.
+                        if (hasChildren)
+                          InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () =>
+                                setState(() => _expanded = !_expanded),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: Icon(
+                                expanded
+                                    ? Icons.expand_more
+                                    : Icons.chevron_right,
+                                size: 18,
+                              ),
+                            ),
+                          )
+                        else
+                          const SizedBox(width: 22),
+                        // Иконка папки: цветная (если задана настройка цвета)
+                        // либо стандартная — в акцентном цвете элементов.
+                        FolderIcon(
+                          colorHex: widget.folder.color,
+                          size: 20,
                         ),
-                      ),
-                    )
-                  else
-                    const SizedBox(width: 22),
-                  // Иконка папки: цветная (если задана настройка цвета)
-                  // либо стандартная — в акцентном цвете элементов.
-                  FolderIcon(
-                    colorHex: widget.folder.color,
-                    size: 20,
-                  ),
-                ],
-              ),
-              title: Text(
-                widget.folder.name,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // «+» напротив каждой папки — быстрое создание подпапки.
-                  IconButton(
-                    key: _addSubfolderButtonKey,
-                    tooltip: 'Добавить подпапку',
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.all(4),
-                    constraints:
-                        const BoxConstraints(minWidth: 26, minHeight: 26),
-                    icon: const Icon(Icons.add, size: 18),
-                    onPressed: () => _addSubfolder(context, state),
-                  ),
-                  if (count != null && count > 0)
-                    Text(
-                      '$count',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
+                      ],
                     ),
-                ],
-              ),
-              selected: selected,
-              selectedTileColor:
-                  Theme.of(context).colorScheme.secondaryContainer,
-              onTap: () => state.selectFolder(widget.folder.id.toString()),
-              onLongPress: () => _showMenu(context, state),
-            ),
+                    title: Text(
+                      widget.folder.name,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // «+» напротив каждой папки — быстрое создание подпапки.
+                        IconButton(
+                          key: _addSubfolderButtonKey,
+                          tooltip: 'Добавить подпапку',
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(
+                              minWidth: 26, minHeight: 26),
+                          icon: const Icon(Icons.add, size: 18),
+                          onPressed: () => _addSubfolder(context, state),
+                        ),
+                        if (count != null && count > 0)
+                          Text(
+                            '$count',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.outline,
+                                ),
+                          ),
+                      ],
+                    ),
+                    selected: selected,
+                    selectedTileColor:
+                        Theme.of(context).colorScheme.secondaryContainer,
+                    onTap: () =>
+                        state.selectFolder(widget.folder.id.toString()),
+                  ),
+                ),
+              );
+            },
           ),
         ),
         // Дочерние подпапки (рекурсивно). Во время поиска — автоматически
@@ -725,45 +786,64 @@ class _FolderTileState extends State<_FolderTile> {
 
   /// Контекстное меню: создание подпапки, цвет иконки, переименование,
   /// удаление.
-  Future<void> _showMenu(BuildContext context, CollectionState state) async {
-    final action = await showModalBottomSheet<String>(
+  ///
+  /// Меню открывается прямо под курсором (как в других частях
+  /// приложения), а не внизу окна.
+  Future<void> _showMenu(
+    BuildContext context,
+    CollectionState state,
+    Offset position,
+  ) async {
+    final overlayBox =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final screenSize = overlayBox?.size ?? MediaQuery.sizeOf(context);
+
+    final action = await showMenu<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // «Крестик» закрытия в правом верхнем углу меню.
-            Align(
-              alignment: Alignment.topRight,
-              child: IconButton(
-                tooltip: 'Закрыть',
-                icon: const Icon(Icons.close, size: 20),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.create_new_folder_outlined),
-              title: const Text('Добавить подпапку'),
-              onTap: () => Navigator.pop(context, 'add_subfolder'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.palette_outlined),
-              title: const Text('Цвет иконки...'),
-              onTap: () => Navigator.pop(context, 'color'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.drive_file_rename_outline),
-              title: const Text('Переименовать'),
-              onTap: () => Navigator.pop(context, 'rename'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text('Удалить'),
-              onTap: () => Navigator.pop(context, 'delete'),
-            ),
-          ],
-        ),
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        (screenSize.width - position.dx).clamp(0, screenSize.width),
+        (screenSize.height - position.dy).clamp(0, screenSize.height),
       ),
+      items: [
+        const PopupMenuItem(
+          value: 'add_subfolder',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.create_new_folder_outlined),
+            title: Text('Добавить подпапку'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'color',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.palette_outlined),
+            title: Text('Цвет иконки...'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'rename',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.drive_file_rename_outline),
+            title: Text('Переименовать'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'delete',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.delete_outline),
+            title: Text('Удалить'),
+          ),
+        ),
+      ],
     );
 
     if (action == 'add_subfolder') {

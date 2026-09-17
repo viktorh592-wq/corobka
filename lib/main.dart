@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 
 import 'features/collection/collection_state.dart';
 import 'features/import/hot_folder_service.dart';
+import 'features/logging/log_service.dart';
+import 'features/server/local_api_server.dart';
 import 'features/settings/theme_provider.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
@@ -64,9 +66,14 @@ class _AppViewState extends State<_AppView> {
         // «Загрузки/Коробка», приложение подхватывает их само.
         // Запускаем после инициализации коллекции (нужен корневой каталог).
         await collection.initialize();
+        LogService.instance.add('INFO', 'Приложение запущено');
         await HotFolderService.startFor(collection);
+        // Локальный HTTP-сервер интеграции: расширение берёт список папок
+        // и присылает свои логи (см. LocalApiServer).
+        await LocalApiServer.startFor(collection);
       } catch (e) {
         debugPrint('HotFolderService start skipped: $e');
+        LogService.instance.add('ERROR', 'Ошибка старта сервисов: $e');
       }
       themeProvider.load();
     });
