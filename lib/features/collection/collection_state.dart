@@ -681,6 +681,30 @@ class CollectionState extends ChangeNotifier {
     }
   }
 
+  /// Импорт файлов, пойманных папкой-приёмником «Загрузки/Коробка»
+  /// (расширение браузера сохраняет их туда, HotFolderService их приносит).
+  ///
+  /// Для видео превью-кадр достраивается тем же механизмом,
+  /// что и при обычном импорте.
+  Future<void> importExternalFiles(List<String> paths, {int? folderId}) async {
+    for (final path in paths) {
+      try {
+        final item = await _service.addItem(sourcePath: path, folderId: folderId);
+        // Для видео сразу достраиваем превью-кадр (как в ImportController).
+        if (item.isVideo) {
+          try {
+            await _ensureVideoThumbnail(item.path);
+          } catch (e) {
+            debugPrint('importExternalFiles: video thumbnail failed: $e');
+          }
+        }
+      } catch (e) {
+        rethrow;
+      }
+    }
+    await _loadItemsAndNotify();
+  }
+
   /// Выбор папки и импорт всех изображений внутри неё (рекурсивно).
   Future<void> importDirectory() async {
     try {

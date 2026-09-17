@@ -3,6 +3,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 
 import 'features/collection/collection_state.dart';
+import 'features/import/hot_folder_service.dart';
 import 'features/settings/theme_provider.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
@@ -52,8 +53,16 @@ class _AppViewState extends State<_AppView> {
     super.initState();
     // Инициализируем коллекцию и загружаем настройки после первого рендера,
     // чтобы не блокировать построение виджет-дерева.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CollectionState>().initialize();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Папка-приёмник: расширение браузера кладёт файлы в
+      // «Загрузки/Коробка», приложение подхватывает их само.
+      // Запускаем после инициализации коллекции (нужен корневой каталог).
+      try {
+        await context.read<CollectionState>().initialize();
+        await HotFolderService.startFor(context.read<CollectionState>());
+      } catch (e) {
+        debugPrint('HotFolderService start skipped: $e');
+      }
       context.read<ThemeProvider>().load();
     });
   }
