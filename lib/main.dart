@@ -54,16 +54,21 @@ class _AppViewState extends State<_AppView> {
     // Инициализируем коллекцию и загружаем настройки после первого рендера,
     // чтобы не блокировать построение виджет-дерева.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Папка-приёмник: расширение браузера кладёт файлы в
-      // «Загрузки/Коробка», приложение подхватывает их само.
-      // Запускаем после инициализации коллекции (нужен корневой каталог).
+      // ВАЖНО: читаем провайдеров из context ДО первого await — любое
+      // обращение к context после асинхронного разрыва ловит линт
+      // use_build_context_synchronously (flutter analyze падает).
+      final collection = context.read<CollectionState>();
+      final themeProvider = context.read<ThemeProvider>();
       try {
-        await context.read<CollectionState>().initialize();
-        await HotFolderService.startFor(context.read<CollectionState>());
+        // Папка-приёмник: расширение браузера кладёт файлы в
+        // «Загрузки/Коробка», приложение подхватывает их само.
+        // Запускаем после инициализации коллекции (нужен корневой каталог).
+        await collection.initialize();
+        await HotFolderService.startFor(collection);
       } catch (e) {
         debugPrint('HotFolderService start skipped: $e');
       }
-      context.read<ThemeProvider>().load();
+      themeProvider.load();
     });
   }
 
