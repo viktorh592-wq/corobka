@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -430,7 +431,7 @@ class LocalApiServer {
     var payload = base64Data;
     var dataMime = '';
     // Формат data:image/png;base64,AAAA…
-    final marker = 'base64,';
+    const marker = 'base64,';
     if (payload.startsWith('data:') && payload.contains(marker)) {
       final meta = payload.substring(5, payload.indexOf(marker));
       dataMime = meta.split(';').first.trim();

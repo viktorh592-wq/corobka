@@ -22,10 +22,13 @@ const DEFAULT_SETTINGS = {
   overlayEnabled: true,    // баннер при перетаскивании картинки
   saveToast: true,         // всплывающее подтверждение сохранения
   saveMode: 'auto',        // 'auto' | 'server' | 'hotfolder'
+  dragWindow: true,        // плавающее окно перетаскивания (как в Eagle)
 };
 
 let activePort = null;       // порт, на котором найдено приложение
 let lastFolders = [];        // кэш списка папок (для fallback-имён)
+let dragWindowId = null;     // id плавающего окна перетаскивания
+let lastWindowSaveAt = 0;    // время последнего сохранения через окно
 
 // ─────────────────────────── УТИЛИТЫ ───────────────────────────
 
@@ -404,6 +407,63 @@ async function notifyUser(message, isError = false) {
   } catch (e) { /* уведомления могут быть запрещены — не критично */ }
 }
 
+// ───────────────────── ПЛАВАЮЩЕЕ ОКНО ПЕРЕТАСКИВАНИЯ ─────────────────────
+
+const DRAG_WIN_W = 470;
+const DRAG_WIN_H = 300;
+
+/** Показать (или передвинуть) окно перетаскивания рядом с курсором. */
+async function showDragWindow(screenX, screenY) {
+  const settings = await getSettings();
+  if (settings.dragWindow === false) return;
+
+  const left = Math.max(0, Math.round(screenX - DRAG_WIN_W / 2));
+  const top = Math.max(0, Math.round(screenY + 24));
+
+  try {
+    if (dragWindowId !== null) {
+      await chrome.windows.get(dragWindowId);
+      await chrome.windows.update(dragWindowId, { left, top, drawAttention: false });
+      return;
+    }
+  } catch (e) {
+    dragWindowId = null; // окно уже закрыто пользователем
+  }
+
+  try {
+    const win = await chrome.windows.create({
+      url: 'drag.html',
+      type: 'popup',
+      width: DRAG_WIN_W,
+      height: DRAG_WIN_H,
+      left,
+      top,
+      focused: false, // не отбираем фокус во время перетаскивания
+    });
+    dragWindowId = win.id;
+  } catch (e) {
+    await pluginLog('WARN', `Не удалось открыть окно перетаскивания: ${e.message}`);
+  }
+}
+
+/** Закрыть окно перетаскивания, если через него не сохраняли только что. */
+async function closeDragWindowIfIdle() {
+  if (Date.now() - lastWindowSaveAt < 3000) return; // сохранение через окно — не мешаем
+  await closeDragWindow();
+}
+
+async function closeDragWindow() {
+  if (dragWindowId === null) return;
+  try {
+    await chrome.windows.remove(dragWindowId);
+  } catch (e) { /* уже закрыто */ }
+  dragWindowId = null;
+}
+
+chrome.windows.onRemoved.addListener((wid) => {
+  if (wid === dragWindowId) dragWindowId = null;
+});
+
 // ───────────────────── ОБРАБОТЧИК СООБЩЕНИЙ ─────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -449,6 +509,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         case 'log': {
           await pluginLog((msg.level || 'INFO').toUpperCase(), msg.message || '');
+          sendResponse({ ok: true });
+          break;
+        }
+        case 'dragStart': {
+          await showDragWindow(msg.x || 0, msg.y || 0);
+          sendResponse({ ok: true });
+          break;
+        }
+        case 'dragEnded': {
+          await closeDragWindowIfIdle();
+          sendResponse({ ok: true });
+          break;
+        }
+        case 'dragSaved': {
+          lastWindowSaveAt = Date.now();
           sendResponse({ ok: true });
           break;
         }

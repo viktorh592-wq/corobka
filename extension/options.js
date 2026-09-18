@@ -18,6 +18,7 @@ const els = {
   overlayEnabled: document.getElementById('overlay-enabled'),
   saveToast: document.getElementById('save-toast'),
   saveMode: document.getElementById('save-mode'),
+  dragWindow: document.getElementById('drag-window'),
 };
 
 // ─────────────────────────── ВСПОМОГАТЕЛЬНЫЕ ───────────────────────────
@@ -98,6 +99,7 @@ async function loadSettings() {
   // Все поля с запасными значениями — страница не должна падать никогда.
   els.overlayEnabled.checked = s.overlayEnabled !== false;
   els.saveToast.checked = s.saveToast !== false;
+  els.dragWindow.checked = s.dragWindow !== false;
   els.saveMode.value = ['auto', 'server', 'hotfolder'].includes(s.saveMode) ? s.saveMode : 'auto';
   els.defaultFolder.value = s.defaultFolderId != null ? String(s.defaultFolderId) : '';
 }
@@ -117,6 +119,9 @@ async function init() {
   });
   els.overlayEnabled.addEventListener('change', () => {
     saveSetting({ overlayEnabled: els.overlayEnabled.checked });
+  });
+  els.dragWindow.addEventListener('change', () => {
+    saveSetting({ dragWindow: els.dragWindow.checked });
   });
   els.saveToast.addEventListener('change', () => {
     saveSetting({ saveToast: els.saveToast.checked });

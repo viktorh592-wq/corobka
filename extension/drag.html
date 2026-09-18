@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Коробка</title>
+  <link rel="stylesheet" href="drag.css" />
+</head>
+<body>
+  <div class="drag-win">
+    <header class="drag-win__header">
+      <img src="icons/icon16.png" alt="" />
+      <span class="drag-win__title">Коробка</span>
+      <span id="conn-dot" class="conn-dot" title="Приложение не найдено"></span>
+      <button id="close-btn" class="close-btn" title="Закрыть">✕</button>
+    </header>
+
+    <div class="drag-win__body">
+      <!-- Левая половина: зона броска (как в Eagle) -->
+      <div id="drop-zone" class="drop-zone">
+        <div class="drop-zone__hint">
+          <div class="drop-zone__icon">⬇</div>
+          <div id="drop-label">Перетащите файлы сюда</div>
+        </div>
+        <div id="drop-status" class="drop-status"></div>
+      </div>
+
+      <!-- Правая половина: папки приложения -->
+      <div class="folder-pane">
+        <div class="folder-pane__head">Папки</div>
+        <div id="folder-list" class="folder-list">
+          <div class="folder-empty">Загрузка…</div>
+        </div>
+        <button id="toggle-create" class="toggle-create">＋ Создать или выбрать папку</button>
+        <div id="create-block" class="create-block" hidden>
+          <input id="new-folder-name" type="text" placeholder="Имя новой папки…" maxlength="100" />
+          <button id="create-folder" class="btn-create">Создать</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="drag.js"></script>
+</body>
+</html>

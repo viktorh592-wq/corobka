@@ -210,6 +210,10 @@
 
       dragImage = { startEl: t, startedAt: Date.now() };
       showBanner();
+      // Плавающее окно перетаскивания (как в Eagle) — открывает фон.
+      try {
+        chrome.runtime.sendMessage({ type: 'dragStart', x: e.screenX, y: e.screenY });
+      } catch (err) { /* окно не критично */ }
     },
     true,
   );
@@ -249,6 +253,11 @@
       // Пользователь бросил картинку вне окна браузера или отменил перетаскивание.
       dragImage = null;
       hideBanner();
+      try {
+        // Если бросок был не на страницу (например, в окно Коробки) —
+        // фон закроет окно, если сохранение не выполнялось.
+        chrome.runtime.sendMessage({ type: 'dragEnded' });
+      } catch (err) { /* не критично */ }
     },
     true,
   );
@@ -284,6 +293,7 @@
           : 'Сохранено в Коробку ✓',
         'ok',
       );
+      try { chrome.runtime.sendMessage({ type: 'dragSaved' }); } catch (err) { /* не критично */ }
     } else {
       showToast('Не сохранено: ' + ((response && response.error) || 'неизвестная ошибка'), 'error');
     }
