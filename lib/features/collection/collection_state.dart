@@ -600,6 +600,19 @@ class CollectionState extends ChangeNotifier {
     await _load();
   }
 
+  /// Создание папки по запросу извне (локальный API-сервер → расширение
+  /// браузера). Отличается от [createFolder] тем, что возвращает id новой
+  /// папки и поддерживает создание подпапок.
+  Future<int> createFolderExternal(String name, {int? parentId}) async {
+    final id = await _service.createFolder(name, parentId: parentId);
+    await _load();
+    LogService.instance.add(
+      'INFO',
+      'Папка «$name» создана через расширение${parentId != null ? ' (внутри #$parentId)' : ''}',
+    );
+    return id;
+  }
+
   /// Создание подпапки внутри указанного родителя.
   /// Иерархия поддерживается через parent_id (см. Folder, FolderDao).
   Future<void> createSubfolder(String name, int parentId) async {

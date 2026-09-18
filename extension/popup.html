@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Коробка</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="popup__header">
+    <img src="icons/icon32.png" alt="" class="popup__logo" />
+    <span class="popup__title">Коробка</span>
+    <span id="status-dot" class="status-dot status-dot--off" title="Приложение не найдено"></span>
+    <button id="open-options" class="icon-btn" title="Настройки">⚙</button>
+  </header>
+
+  <div id="conn-banner" class="conn-banner conn-banner--hidden">
+    Приложение «Коробка» не запущено.<br />
+    Запустите его — папки появятся автоматически.
+  </div>
+
+  <section class="popup__section">
+    <div class="section-head">
+      <span>Сохранять в папку</span>
+      <button id="refresh-folders" class="icon-btn" title="Обновить список папок">⟳</button>
+    </div>
+    <div id="folder-list" class="folder-list">
+      <div class="folder-empty">Загрузка…</div>
+    </div>
+    <div class="create-row">
+      <input id="new-folder-name" type="text" placeholder="Новая папка…" maxlength="100" />
+      <button id="create-folder" class="btn btn--primary" title="Создать папку в приложении">Создать</button>
+    </div>
+  </section>
+
+  <section class="popup__section">
+    <button id="save-tab-image" class="btn btn--wide">Сохранить картинку со страницы</button>
+    <div id="action-status" class="action-status" hidden></div>
+  </section>
+
+  <footer class="popup__footer">
+    <span id="app-info">…</span>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Коробка — настройки</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <main class="wrap">
+    <h1><img src="icons/icon48.png" alt="" width="28" height="28" /> Коробка — настройки</h1>
+
+    <section class="card">
+      <h2>Связь с приложением</h2>
+      <p class="hint">
+        Расширение ищет приложение «Коробка» на вашем компьютере по адресам
+        <code>127.0.0.1:41595</code>, <code>41596</code>, <code>41597</code> (как у Eagle).
+        Настраивать порт не нужно — он определяется автоматически.
+      </p>
+      <div class="row">
+        <button id="test-conn" class="btn">Проверить соединение</button>
+        <span id="conn-result" class="conn-result">—</span>
+      </div>
+      <p class="hint" id="conn-help">
+        Если проверка не проходит: запустите приложение «Коробка» и убедитесь,
+        что в его журнале есть строка «Сервер интеграции запущен».
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Папка по умолчанию</h2>
+      <p class="hint">
+        Список загружается из приложения. Папки, созданные в приложении,
+        появляются здесь автоматически после нажатия «Обновить».
+      </p>
+      <div class="row">
+        <select id="default-folder" class="select">
+          <option value="">Все картинки (корень)</option>
+        </select>
+        <button id="reload-folders" class="btn">Обновить</button>
+      </div>
+      <div id="folder-status" class="folder-status"></div>
+    </section>
+
+    <section class="card">
+      <h2>Поведение</h2>
+      <label class="check">
+        <input type="checkbox" id="overlay-enabled" />
+        Показывать подсказку при перетаскивании картинки по странице
+      </label>
+      <label class="check">
+        <input type="checkbox" id="save-toast" />
+        Показывать подтверждение после сохранения
+      </label>
+      <div class="row">
+        <label class="label" for="save-mode">Куда сохранять, если приложение закрыто:</label>
+        <select id="save-mode" class="select">
+          <option value="auto">Автоматически (сервер → горячая папка)</option>
+          <option value="server">Только в приложение (без запасного варианта)</option>
+          <option value="hotfolder">Сразу в горячую папку «Загрузки/Коробка»</option>
+        </select>
+      </div>
+      <p class="hint">
+        Горячая папка — это «Загрузки/Коробка» на вашем компьютере. Файлы из неё
+        приложение забирает в коллекцию при следующем запуске.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Как сохранять картинки</h2>
+      <ul class="howto">
+        <li><b>Перетаскивание.</b> Потяните картинку по странице — появится оранжевая подсказка. Отпустите кнопку мыши в любом месте — картинка улетит в Коробку.</li>
+        <li><b>Контекстное меню.</b> Правый клик по картинке → «Сохранить картинку в Коробку».</li>
+        <li><b>Кнопка на панели.</b> Откройте всплывающее окно, выберите папку и нажмите «Сохранить картинку со страницы».</li>
+      </ul>
+      <p class="hint">
+        На Pinterest расширение автоматически подставляет ссылку на картинку в
+        полном размере (папка <code>/originals/</code>).
+      </p>
+    </section>
+  </main>
+
+  <script src="options.js"></script>
+</body>
+</html>
