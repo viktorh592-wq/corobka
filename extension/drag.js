@@ -1,5 +1,5 @@
 /**
- * Коробка — окно перетаскивания (плавающая панель, как в Eagle).
+ * Коробка — окно приёма файлов из Проводника (плавающая панель).
  *
  * Что исправлено в v0.4.0 по отзыву пользователя:
  *  - в правой панели, где раньше было «Нет папок», теперь отображаются
@@ -11,6 +11,10 @@
  *  - страница Pinterest больше не запрашивает «доступ к приложениям и
  *    сервисам» — все запросы к приложению идут через сервис-воркер
  *    расширения, а не со страницы сайта.
+ *
+ * Новое в v0.5.0: при включённой настройке «Спрашивать папку для
+ * сохранения» брошенный файл не сохраняется сразу — окно переходит в
+ * режим ожидания, и файл уходит в папку, на которую вы кликнули.
  */
 
 'use strict';
@@ -33,6 +37,8 @@ let connected = false;
 let pollTimer = null;
 let foldersJson = '';
 let lastFolders = [];
+let askMode = false;       // настройка «Спрашивать папку для сохранения»
+let pendingItem = null;    // брошенный файл, ждущий выбора папки (askMode)
 
 // ─────────────────────────── УТИЛИТЫ ───────────────────────────
 
@@ -119,6 +125,11 @@ function renderFolders(folders) {
 }
 
 async function selectFolder(id) {
+  // Режим «Спрашивать папку»: клик по папке = сохранить в неё.
+  if (askMode && pendingItem) {
+    await saveFromWindow(pendingItem, id);
+    return;
+  }
   selectedFolderId = id;
   await sendMessage({ type: 'setSettings', patch: { lastFolderId: id } });
   foldersJson = ''; // сброс кэша — перерисовать с новым выделением
@@ -156,15 +167,55 @@ async function createFolder() {
   els.createBtn.disabled = false;
   if (res.ok) {
     els.nameInput.value = '';
-    selectedFolderId = res.folder.id;
-    setDropStatus(`Папка «${res.folder.name}» создана`, 'ok');
+    const created = res.folder;
+    setDropStatus(`Папка «${created.name}» создана`, 'ok');
     foldersJson = '';
     const r2 = await sendMessage({ type: 'getFolders' });
     if (r2.ok) renderFolders(r2.folders || []);
+    // Режим «Спрашивать папку»: создаём и сразу сохраняем в неё.
+    if (askMode && pendingItem) {
+      await saveFromWindow(pendingItem, created.id);
+      return;
+    }
+    selectedFolderId = created.id;
+    foldersJson = '';
+    renderFolders(lastFolders);
     setTimeout(() => setDropStatus(''), 2000);
   } else {
     setDropStatus('Ошибка: ' + (res.error || '?'), 'err');
   }
+}
+
+/** Сохранить файл, лежащий в окне, в указанную папку. */
+async function saveFromWindow(item, folderId) {
+  setDropStatus('Сохраняю…', 'busy');
+  const res = await sendMessage({
+    type: 'saveImage',
+    image: item.image,
+    folderId: folderId === undefined ? null : folderId,
+  });
+  try { chrome.runtime.sendMessage({ type: 'windowPending', value: false }); } catch (e) {}
+  if (res.ok) {
+    pendingItem = null;
+    setDropStatus(
+      res.target === 'hotfolder'
+        ? 'Приложение закрыто — сохранено в «Загрузки/Коробка»'
+        : 'Сохранено в Коробку ✓',
+      'ok',
+    );
+    try { chrome.runtime.sendMessage({ type: 'dragSaved' }); } catch (e) {}
+    setTimeout(() => window.close(), 1200);
+  } else {
+    setDropStatus('Не сохранено: ' + (res.error || '?'), 'err');
+  }
+}
+
+/** Перевести окно в режим ожидания выбора папки. */
+function setPending(item) {
+  pendingItem = item;
+  els.dropLabel.textContent = `«${item.label || 'файл'}» готов к сохранению`;
+  setDropStatus('Выберите папку справа — файл сохранится в неё', 'busy');
+  try { chrome.runtime.sendMessage({ type: 'windowPending', value: true }); } catch (e) {}
 }
 
 // ─────────────────────────── ПРИЁМ БРОСКА ───────────────────────────
@@ -260,9 +311,11 @@ function filenameFromUrl(u) {
 async function handleDrop(e) {
   e.preventDefault();
   els.dropZone.classList.remove('drop-zone--over');
-  els.dropLabel.textContent = 'Перетащите файлы сюда';
 
-  setDropStatus('Сохраняю…', 'busy');
+  // Окно занято — не закрывать фону (гонка с закрытием после dragleave).
+  try { chrome.runtime.sendMessage({ type: 'windowDrop' }); } catch (err) {}
+
+  setDropStatus('Читаю файл…', 'busy');
   let drop;
   try {
     drop = await resolveDrop(e.dataTransfer);
@@ -275,19 +328,13 @@ async function handleDrop(e) {
     return;
   }
 
-  const res = await sendMessage({ type: 'saveImage', image: drop.image });
-  if (res.ok) {
-    setDropStatus(
-      res.target === 'hotfolder'
-        ? 'Приложение закрыто — сохранено в «Загрузки/Коробка»'
-        : 'Сохранено в Коробку ✓',
-      'ok',
-    );
-    await sendMessage({ type: 'dragSaved' });
-    setTimeout(() => window.close(), 1400);
-  } else {
-    setDropStatus('Не сохранено: ' + (res.error || '?'), 'err');
+  // Режим «Спрашивать папку»: сначала ждём клик по папке.
+  if (askMode) {
+    setPending(drop);
+    return;
   }
+
+  await saveFromWindow(drop, selectedFolderId);
 }
 
 // ─────────────────────────── СОБЫТИЯ ───────────────────────────
@@ -325,11 +372,15 @@ async function init() {
   const s = await sendMessage({ type: 'getSettings' });
   if (s.ok && s.settings) {
     selectedFolderId = s.settings.lastFolderId ?? s.settings.defaultFolderId ?? null;
+    askMode = s.settings.askFolder === true;
   }
   await loadFolders();
   // Синхронизация папок с приложением, пока окно открыто.
   pollTimer = setInterval(loadFolders, 3000);
-  window.addEventListener('unload', () => clearInterval(pollTimer));
+  window.addEventListener('unload', () => {
+    clearInterval(pollTimer);
+    try { chrome.runtime.sendMessage({ type: 'windowPending', value: false }); } catch (e) {}
+  });
 }
 
 init();

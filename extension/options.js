@@ -19,6 +19,7 @@ const els = {
   saveToast: document.getElementById('save-toast'),
   saveMode: document.getElementById('save-mode'),
   dragWindow: document.getElementById('drag-window'),
+  askFolder: document.getElementById('ask-folder'),
 };
 
 // ─────────────────────────── ВСПОМОГАТЕЛЬНЫЕ ───────────────────────────
@@ -100,6 +101,7 @@ async function loadSettings() {
   els.overlayEnabled.checked = s.overlayEnabled !== false;
   els.saveToast.checked = s.saveToast !== false;
   els.dragWindow.checked = s.dragWindow !== false;
+  els.askFolder.checked = s.askFolder === true;
   els.saveMode.value = ['auto', 'server', 'hotfolder'].includes(s.saveMode) ? s.saveMode : 'auto';
   els.defaultFolder.value = s.defaultFolderId != null ? String(s.defaultFolderId) : '';
 }
@@ -122,6 +124,9 @@ async function init() {
   });
   els.dragWindow.addEventListener('change', () => {
     saveSetting({ dragWindow: els.dragWindow.checked });
+  });
+  els.askFolder.addEventListener('change', () => {
+    saveSetting({ askFolder: els.askFolder.checked });
   });
   els.saveToast.addEventListener('change', () => {
     saveSetting({ saveToast: els.saveToast.checked });

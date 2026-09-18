@@ -22,13 +22,18 @@ const DEFAULT_SETTINGS = {
   overlayEnabled: true,    // баннер при перетаскивании картинки
   saveToast: true,         // всплывающее подтверждение сохранения
   saveMode: 'auto',        // 'auto' | 'server' | 'hotfolder'
-  dragWindow: true,        // плавающее окно перетаскивания (как в Eagle)
+  dragWindow: true,        // окно с папками при перетаскивании (как в Eagle/v4.1.0)
+  askFolder: false,        // спрашивать папку перед каждым сохранением.
+                           // Хранится в chrome.storage.local — глобально для всех
+                           // сайтов, не сбрасывается при переходах/перезагрузках.
 };
 
 let activePort = null;       // порт, на котором найдено приложение
 let lastFolders = [];        // кэш списка папок (для fallback-имён)
-let dragWindowId = null;     // id плавающего окна перетаскивания
+let dragWindowId = null;     // id окна приёма файлов из Проводника
 let lastWindowSaveAt = 0;    // время последнего сохранения через окно
+let windowHasPending = false; // в окне ждёт выбора папки файл (режим «спрашивать»)
+let idleCloseTimer = null;
 
 // ─────────────────────────── УТИЛИТЫ ───────────────────────────
 
@@ -238,7 +243,8 @@ function extForImage(image) {
  * Работает и когда приложение закрыто — файл подхватится при старте.
  */
 async function downloadToHotFolder(image, folderId) {
-  const sub = folderNameById(folderId ?? (await getSettings()).lastFolderId);
+  // folderId уже разрешён в saveImageSmart (null = явный корень — без подпапки).
+  const sub = folderNameById(folderId);
   const dir = sub ? `Коробка/${sub}/` : 'Коробка/';
   const stamp = Date.now();
   const filename = `${dir}korobka_${stamp}.${extForImage(image)}`;
@@ -261,10 +267,12 @@ async function downloadToHotFolder(image, folderId) {
 
 // ───────────────────── ВЫСОКОУРОВНЕВОЕ СОХРАНЕНИЕ ─────────────────────
 
-/** Единая точка сохранения: пробует сервер, потом горячую папку. */
+/** Единая точка сохранения: пробует сервер, потом горячую папку.
+ * folderIdRaw: undefined — выбора не было (берём папку по умолчанию);
+ * null — пользователь ЯВНО выбрал корень («Все картинки»); число — папка. */
 async function saveImageSmart(image, folderIdRaw) {
   const settings = await getSettings();
-  const folderId = folderIdRaw !== undefined && folderIdRaw !== null
+  const folderId = folderIdRaw !== undefined
     ? folderIdRaw
     : settings.lastFolderId ?? settings.defaultFolderId ?? null;
 
@@ -359,8 +367,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== MENU_SAVE) return;
   const srcUrl = info.srcUrl;
   if (!srcUrl) return;
+  const image = { url: srcUrl, altUrls: pinterestVariants(srcUrl), filename: filenameFromUrl(srcUrl) };
   try {
-    const image = { url: srcUrl, altUrls: pinterestVariants(srcUrl), filename: filenameFromUrl(srcUrl) };
+    // Режим «Спрашивать папку для сохранения»: сначала окно с выбором папки.
+    const settings = await getSettings();
+    if (settings.askFolder && tab && tab.id != null) {
+      const asked = await askTabToChooseFolder(tab.id, image);
+      if (asked) {
+        await pluginLog('INFO', 'Открыто окно выбора папки (контекстное меню)');
+        return;
+      }
+      // На странице нет контент-скрипта (chrome:// и т.п.) — сохраняем напрямую.
+    }
     const res = await saveImageSmart(image);
     await notifyUser(res.target === 'hotfolder'
       ? 'Приложение закрыто — картинка сохранена в «Загрузки/Коробка»'
@@ -369,6 +387,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     await notifyUser(`Ошибка сохранения: ${e.message}`, true);
   }
 });
+
+/** Попросить страницу показать окно выбора папки. false — если не удалось. */
+async function askTabToChooseFolder(tabId, image) {
+  try {
+    const resp = await chrome.tabs.sendMessage(tabId, { type: 'askSave', image });
+    return !!(resp && resp.ok);
+  } catch (e) {
+    return false;
+  }
+}
 
 function filenameFromUrl(u) {
   try {
@@ -412,10 +440,12 @@ async function notifyUser(message, isError = false) {
 const DRAG_WIN_W = 470;
 const DRAG_WIN_H = 300;
 
-/** Показать (или передвинуть) окно перетаскивания рядом с курсором. */
+/** Показать (или передвинуть) окно приёма файлов рядом с курсором.
+ * Гейт по настройкам делает контент-скрипт — здесь не фильтруем,
+ * чтобы режим «Спрашивать папку» работал и при выключенном dragWindow. */
 async function showDragWindow(screenX, screenY) {
   const settings = await getSettings();
-  if (settings.dragWindow === false) return;
+  if (settings.dragWindow === false && settings.askFolder !== true) return;
 
   const left = Math.max(0, Math.round(screenX - DRAG_WIN_W / 2));
   const top = Math.max(0, Math.round(screenY + 24));
@@ -446,10 +476,20 @@ async function showDragWindow(screenX, screenY) {
   }
 }
 
-/** Закрыть окно перетаскивания, если через него не сохраняли только что. */
-async function closeDragWindowIfIdle() {
+/** Закрыть окно приёма файлов, если через него не сохраняют прямо сейчас.
+ * Закрытие отложенное: бросок из Проводника летит в окно уже ПОСЛЕ того,
+ * как курсор покинул страницу, поэтому закрываем с задержкой и только
+ * если за это время в окне ничего не появилось и ничего не сохранили. */
+function closeDragWindowIfIdle() {
   if (Date.now() - lastWindowSaveAt < 3000) return; // сохранение через окно — не мешаем
-  await closeDragWindow();
+  if (windowHasPending) return; // в окне ждёт выбора папки файл
+  if (idleCloseTimer) return;
+  idleCloseTimer = setTimeout(() => {
+    idleCloseTimer = null;
+    if (Date.now() - lastWindowSaveAt < 3000) return;
+    if (windowHasPending) return;
+    closeDragWindow();
+  }, 2500); // хватает времени донести файл из Проводника до окна
 }
 
 async function closeDragWindow() {
@@ -518,12 +558,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           break;
         }
         case 'dragEnded': {
-          await closeDragWindowIfIdle();
+          closeDragWindowIfIdle();
           sendResponse({ ok: true });
           break;
         }
         case 'dragSaved': {
           lastWindowSaveAt = Date.now();
+          sendResponse({ ok: true });
+          break;
+        }
+        case 'windowDrop': {
+          // В окно приёма файлов что-то бросили — не закрывать его.
+          lastWindowSaveAt = Date.now();
+          sendResponse({ ok: true });
+          break;
+        }
+        case 'windowPending': {
+          windowHasPending = !!msg.value;
           sendResponse({ ok: true });
           break;
         }
