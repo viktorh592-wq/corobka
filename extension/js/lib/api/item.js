@@ -20,6 +20,10 @@ class Item {
                         // подпапки для режима горячей папки (когда приложение закрыто).
                         folderID: item.folderID ?? (Array.isArray(item.folderIDs) && item.folderIDs.length ? item.folderIDs[0] : null),
                         folderName: item.folderName || "",
+                        // Коробка v0.6: комментарий и теги из окна сохранения —
+                        // попадают в приложение (поле «Комментарий» элемента).
+                        annotation: typeof item.annotation === "string" ? item.annotation.trim().slice(0, 2000) : "",
+                        tags: Array.isArray(item.tags) ? item.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 30) : [],
                 };
 
                 // data:URL отдаём через blob (надёжно для больших файлов),

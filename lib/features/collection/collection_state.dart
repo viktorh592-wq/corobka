@@ -825,14 +825,25 @@ class CollectionState extends ChangeNotifier {
   }
 
   /// Импорт файлов, пойманных папкой-приёмником «Загрузки/Коробка»
-  /// (расширение браузера сохраняет их туда, HotFolderService их приносит).
+  /// (расширение браузера сохраняет их туда, HotFolderService их приносит),
+  /// а также файлов, сохранённых расширением напрямую через локальный сервер.
+  ///
+  /// [notes] — комментарий из окна сохранения расширения, [title] —
+  /// пользовательское название, [tags] — теги, введённые в окне сохранения.
   ///
   /// Для видео превью-кадр достраивается тем же механизмом,
-  /// что и при обычном импорте.
-  Future<void> importExternalFiles(List<String> paths, {int? folderId}) async {
+  /// что и при обычном импорте. Возвращает созданные элементы.
+  Future<List<CollectionItem>> importExternalFiles(
+    List<String> paths, {
+    int? folderId,
+    String? notes,
+    String? title,
+    List<String> tags = const [],
+  }) async {
+    final created = <CollectionItem>[];
     for (final path in paths) {
       try {
-        final item = await _service.addItem(sourcePath: path, folderId: folderId);
+        var item = await _service.addItem(sourcePath: path, folderId: folderId);
         // Для видео сразу достраиваем превью-кадр (как в ImportController).
         if (item.isVideo) {
           try {
@@ -841,11 +852,55 @@ class CollectionState extends ChangeNotifier {
             debugPrint('importExternalFiles: video thumbnail failed: $e');
           }
         }
+
+        // Метаданные, пришедшие из расширения: название и комментарий.
+        final cleanTitle = title?.trim() ?? '';
+        final cleanNotes = notes?.trim() ?? '';
+        if (cleanTitle.isNotEmpty || cleanNotes.isNotEmpty) {
+          final finalTitle = _clip(cleanTitle, _kMaxExternalTitleLength);
+          final finalNotes = _clip(cleanNotes, _kMaxExternalNotesLength);
+          await _service.updateItemAnnotations(
+            item.id,
+            title: finalTitle,
+            notes: finalNotes,
+          );
+          item = item.copyWith(
+            title: finalTitle ?? item.title,
+            notes: finalNotes,
+          );
+        }
+
+        // Теги из окна сохранения: создаём при необходимости и привязываем.
+        var tagsApplied = false;
+        for (final rawTag in tags) {
+          final tagName = rawTag.trim();
+          if (tagName.isEmpty) continue;
+          try {
+            await _service.addTagToItem(item.id, tagName);
+            tagsApplied = true;
+          } catch (e) {
+            debugPrint('importExternalFiles: tag "$tagName" failed: $e');
+          }
+        }
+
+        created.add(item);
+        if (tagsApplied) await _loadTagsAndNotify();
       } catch (e) {
         rethrow;
       }
     }
     await _loadItemsAndNotify();
+    return created;
+  }
+
+  /// Ограничения длины названия/комментария, пришедших из расширения.
+  static const int _kMaxExternalTitleLength = 200;
+  static const int _kMaxExternalNotesLength = 2000;
+
+  /// Обрезка строки до [max] символов; null/пустая строка → null.
+  static String? _clip(String value, int max) {
+    if (value.isEmpty) return null;
+    return value.length <= max ? value : value.substring(0, max);
   }
 
   /// Выбор папки и импорт всех изображений внутри неё (рекурсивно).

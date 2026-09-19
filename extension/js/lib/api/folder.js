@@ -33,8 +33,8 @@ class Folder {
         constructor() {
                 if (Folder.#isServiceWorker()) {
                         eagle.runtime.onMessage("korobka-folders", (msg, sender, sendResponse) => {
-                                this.#fetchFolders()
-                                        .then((folders) => sendResponse({ ok: true, folders }))
+                                this.#fetchFoldersWithStatus()
+                                        .then((info) => sendResponse({ ok: true, folders: info.folders, reachable: info.reachable, outdated: info.outdated }))
                                         .catch((error) => sendResponse({ ok: false, error: String(error && error.message || error) }));
                                 return !0;
                         });
@@ -70,6 +70,22 @@ class Folder {
                 return folders.map((f) => this.#toDragItem(f));
         }
 
+        /**
+         * Состояние синхронизации (для подсказок в окне сохранения):
+         * {folders, reachable, outdated} — reachable: приложение отвечает;
+         * outdated: приложение запущено, но собрано без /api/folder/list.
+         */
+        async probe() {
+                if (Folder.#isServiceWorker()) return this.#fetchFoldersWithStatus();
+                try {
+                        const resp = await this.#sendMessageWithTimeout("korobka-folders", {}, 6000);
+                        if (resp && resp.ok) {
+                                return { folders: resp.folders || [], reachable: !!resp.reachable, outdated: !!resp.outdated };
+                        }
+                } catch (e) { /* таймаут/нет ответа — считаем приложение недоступным */ }
+                return { folders: [], reachable: false, outdated: false };
+        }
+
         /** Создание папки в приложении (POST /api/folder/create). */
         async create(name, parent = void 0) {
                 name = String(name == null ? "" : name).trim();
@@ -78,7 +94,12 @@ class Folder {
                 if (Folder.#isServiceWorker()) {
                         folder = await this.#apiCreateFolder(name, parent ?? null);
                 } else {
-                        const resp = await eagle.runtime.sendMessage("korobka-folder-create", { name, parentId: parent ?? null });
+                        let resp;
+                        try {
+                                resp = await this.#sendMessageWithTimeout("korobka-folder-create", { name, parentId: parent ?? null }, 8000);
+                        } catch (e) {
+                                throw new Error("приложение «Коробка» не отвечает — убедитесь, что оно запущено и обновлено");
+                        }
                         if (!resp || !resp.ok) throw new Error(resp && resp.error || "не удалось создать папку");
                         folder = resp.folder;
                 }
@@ -101,28 +122,62 @@ class Folder {
                 };
         }
 
-        /** Список папок с кэшем на Folder.CACHE_TTL. */
+        /**
+         * Список папок с кэшем на Folder.CACHE_TTL.
+         * В контент-скриптах и страницах расширения — запрос через service worker
+         * с таймаутом: без него зависший ответ навсегда оставлял бы список пустым.
+         */
         async #fetchFolders() {
-                // Контент-скрипты и страницы расширения спрашивают service worker —
-                // только у него есть host_permissions для запросов к 127.0.0.1.
                 if (!Folder.#isServiceWorker()) {
                         try {
-                                const resp = await eagle.runtime.sendMessage("korobka-folders");
+                                const resp = await this.#sendMessageWithTimeout("korobka-folders", {}, 6000);
                                 return resp && resp.ok && Array.isArray(resp.folders) ? resp.folders : [];
                         } catch (e) {
                                 return [];
                         }
                 }
+                return (await this.#fetchFoldersWithStatus()).folders;
+        }
+
+        /** Список папок + признак связи/устаревшего приложения (только в service worker). */
+        async #fetchFoldersWithStatus() {
                 const now = Date.now();
                 if (this.#foldersCache && now - this.#foldersCacheAt < Folder.CACHE_TTL) {
-                        return this.#foldersCache;
+                        return { folders: this.#foldersCache, reachable: this.#lastReachable, outdated: this.#lastOutdated };
                 }
-                const folders = await this.#request("GET", "/api/folder/list", null, 2500)
-                        .then((json) => Array.isArray(json && json.data) ? json.data.filter((f) => f && f.id != null && f.name) : [])
-                        .catch(() => []);
+                const port = await this.#findPort().catch(() => 0);
+                if (!port) {
+                        this.#foldersCache = [];
+                        this.#foldersCacheAt = Date.now();
+                        this.#lastReachable = false;
+                        this.#lastOutdated = false;
+                        return { folders: [], reachable: false, outdated: false };
+                }
+                let folders = [];
+                let outdated = false;
+                try {
+                        const json = await this.#request("GET", "/api/folder/list", null, 2500);
+                        folders = Array.isArray(json && json.data) ? json.data.filter((f) => f && f.id != null && f.name) : [];
+                } catch (e) {
+                        // 404 — приложение запущено, но старой сборки (без /api/folder/list).
+                        if (/404|not found/i.test(String(e && e.message || e))) outdated = true;
+                }
                 this.#foldersCache = folders;
                 this.#foldersCacheAt = Date.now();
-                return folders;
+                this.#lastReachable = true;
+                this.#lastOutdated = outdated;
+                return { folders, reachable: true, outdated };
+        }
+
+        #lastReachable = false;
+        #lastOutdated = false;
+
+        /** sendMessage с таймаутом (ответ может не прийти, если service worker перезапускается). */
+        #sendMessageWithTimeout(channel, payload, ms) {
+                return Promise.race([
+                        eagle.runtime.sendMessage(channel, payload),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+                ]);
         }
 
         /** Запрос к серверу приложения (с перебором портов и кэшем порта). */
@@ -192,7 +247,16 @@ class Folder {
         async #apiCreateFolder(name, parentId) {
                 name = String(name == null ? "" : name).trim().slice(0, 100);
                 if (!name) throw new Error("пустое имя папки");
-                const json = await this.#request("POST", "/api/folder/create", { name, parentId: parentId ?? null }, 5000);
+                let json;
+                try {
+                        json = await this.#request("POST", "/api/folder/create", { name, parentId: parentId ?? null }, 5000);
+                } catch (e) {
+                        const m = String(e && e.message || e);
+                        if (/404|not found/i.test(m)) {
+                                throw new Error("приложение «Коробка» устарело — обновите его до последней сборки");
+                        }
+                        throw e;
+                }
                 this.#foldersCache = null;
                 this.#foldersCacheAt = 0;
                 return json.data || { id: null, name };

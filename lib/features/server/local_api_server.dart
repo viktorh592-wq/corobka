@@ -106,7 +106,7 @@ class LocalApiServer {
           'status': 'success',
           'data': {
             'name': 'korobka',
-            'version': '0.4.0',
+            'version': '0.5.0',
             'port': _port,
           },
         });
@@ -245,6 +245,19 @@ class LocalApiServer {
         final base64Data = (payload['base64'] ?? '').toString().trim();
         final rawFilename = (payload['filename'] ?? '').toString();
 
+        // Метаданные из окна сохранения расширения (v0.5.0): комментарий,
+        // название и теги. Всё необязательное — старые расширения работают.
+        final annotation = (payload['annotation'] ?? '').toString().trim();
+        final rawTitle = (payload['name'] ?? payload['title'] ?? '').toString().trim();
+        final rawTags = <String>[];
+        if (payload['tags'] is List) {
+          for (final t in payload['tags'] as List) {
+            final name = t.toString().trim();
+            if (name.isNotEmpty) rawTags.add(name);
+            if (rawTags.length >= 30) break;
+          }
+        }
+
         String tempPath;
         try {
           if (base64Data.isNotEmpty) {
@@ -273,7 +286,13 @@ class LocalApiServer {
         }
 
         try {
-          await state.importExternalFiles([tempPath], folderId: folderId);
+          await state.importExternalFiles(
+            [tempPath],
+            folderId: folderId,
+            notes: annotation.isEmpty ? null : annotation,
+            title: rawTitle.isEmpty ? null : rawTitle,
+            tags: rawTags,
+          );
         } catch (e) {
           _deleteQuietly(File(tempPath));
           await _sendJson(
@@ -287,7 +306,9 @@ class LocalApiServer {
 
         LogService.instance.add(
           'INFO',
-          'Сохранено из расширения: ${base64Data.isNotEmpty ? rawFilename : url}',
+          'Сохранено из расширения: ${base64Data.isNotEmpty ? rawFilename : url}'
+          '${annotation.isNotEmpty ? ' (с комментарием)' : ''}'
+          '${rawTags.isNotEmpty ? ' (теги: ${rawTags.join(', ')})' : ''}',
           source: 'plugin',
         );
         await _sendJson(request, {
