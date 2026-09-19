@@ -1,0 +1,1 @@
+angular.module("hoverPlayVideo",[]).directive("hoverPlayVideo",["$timeout",function(i){return{restrict:"A",link:function(e,n,o){let u,t=n[0];n.on("mouseenter",function(){u=i(function(){t.paused&&t.play()},400)}),n.on("mouseleave",function(){u&&(i.cancel(u),u=null),t.paused||t.pause()}),e.$on("$destroy",function(){n.off("mouseenter"),n.off("mouseleave")})}}}]);

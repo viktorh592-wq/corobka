@@ -1,0 +1,1 @@
+class BehancePlugin extends SitePlugin{getMeta(e){if(!location.href.includes("behance.net"))return n;let n={};var t=document.querySelectorAll('figcaption[class^="Project-caption"] span[class^="Project-title"]');return 0<t.length&&(n.title=t[0].innerText),n}}(()=>{var e=new BehancePlugin;eagle.plugin.register("behance.net",e)})();

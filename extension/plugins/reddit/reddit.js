@@ -1,0 +1,1 @@
+class RedditPlugin extends SitePlugin{getMeta(e){if(!location.href.includes("reddit.com"))return t;let t={};var e=e.closest("article");return e&&(e=e.querySelectorAll("a"),t.link=e[0]?.href),t}}(()=>{var e=new RedditPlugin;eagle.plugin.register("reddit.com",e)})();

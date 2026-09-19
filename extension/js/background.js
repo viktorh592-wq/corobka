@@ -1,0 +1,1 @@
+"use strict";(async()=>{await eagle.preference.init(),await eagle.i18n.init(),await eagle.contextMenus.init()})();

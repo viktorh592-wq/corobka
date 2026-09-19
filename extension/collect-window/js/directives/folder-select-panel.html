@@ -1,0 +1,104 @@
+<select-panel id="folder-select-panel" class="select-panel folder-select-panel max-depth-{{listData.maxDepth}}" ng-mouseup="focusSearchInput()">
+	<div class="panel-header">
+		<!-- 搜索框 -->
+		<div class="search">
+			<input id="folder-select-panel-search-input" type="search" placeholder="{{ 'collect-window.folder-select-panel.search-folder' | i18n }}" />
+		</div>
+		<library-switcher theme="theme" on-library-switching="onLibrarySwitching" on-library-switched="onLibrarySwitched" on-library-switch-closed="onLibrarySwitchClosed"></library-switcher>
+	</div>
+
+	<!-- 空状态 -->
+	<div class="panel-empty" ng-if="listData.items.length == 0">
+		<span ng-if="listData.currentTab === 'RECENT'">{{ 'collect-window.folder-select-panel.empty' | i18n }}</span>
+	</div>
+
+	<!-- 项目列表 -->
+	<div ng-hide="listData.items.length == 0" class="panel-list" vs-auto-scroll index="listData.currentIndex" vs-size="27" scroll-container="#folder-select-panel [vs-repeat]">
+		<select-panel-list vs-excess="30" vs-repeat="26" vs-size="size" allow-scroll>
+			<div
+				class="select-panel-item"
+				ng-class="{'active': item.index == listData.currentIndex || item.selected == true, 'checked': listData.selectedIds[item.id] }"
+				ng-repeat="item in listData.items"
+				ng-click="clickItem(item)"
+				ng-mousemove="hoverItem(item)"
+				ng-switch
+				on="item.type"
+			>
+				<!-- 分隔線 -->
+				<div class="separator" ng-switch-when="separator"></div>
+
+				<!-- 建立資料夾 -->
+				<div ng-switch-when="create" class="list-item" style="height: 26px; line-height: 26px" ng-class="{'active': item.index == listData.currentIndex}">
+					<!-- <div class="checkbox">
+						<img ng-src="/images/{{theme}}/icons/ic-folder-select-create.svg" />
+					</div> -->
+					<div class="icon"><div class="fake-svg png"></div></div>
+					<div class="name">{{ 'collect-window.folder-select-panel.create' | i18n }} "<b>{{item.name}}</b>"</div>
+				</div>
+
+				<!-- 全部 -->
+				<div ng-switch-when="all" class="list-item" style="height: 26px; line-height: 26px" ng-class="{'active': item.index == listData.currentIndex}">
+					<div class="icon"><div class="fake-svg png"></div></div>
+					<div class="name">{{ 'collect-window.folder-select-panel.all' | i18n }}</div>
+					<div class="right">
+						<!-- <div ng-if="!isMultipleSelectMode" class="collect-btn">{{ 'collect-window.collect' | i18n }}</div> -->
+					</div>
+				</div>
+
+				<!-- 資料夾 -->
+				<div
+					ng-switch-default
+					class="list-item depth-{{item.depth}} color-{{item.iconColor}} has-icon"
+					style="height: 26px; line-height: 26px"
+					ng-class="{ 'active': item.index == listData.currentIndex || listData.selectedIds[item.id],  'selected': listData.selectedIds[item.id], 'search-mode': listData.currentTab === 'SELECTED' || listData.searchKeyword.length > 0 }"
+					ng-right-click="$event.stopPropagation(); openItemSubmenu(item);"
+					title="{{ ::item.name }}"
+				>
+					<div class="guidelines" ng-if="!item.isRecent">
+						<div class="guideline color-{{line}} depth-{{$index + 1}}" ng-if="item.depth !== $index" ng-repeat="line in item.guidelines track by $index">
+							<div class="top"></div>
+							<div class="middle"></div>
+							<div class="bottom"></div>
+						</div>
+					</div>
+					<!-- <div class="checkbox"><div class="check-icon"></div></div> -->
+					<div class="icon">
+						<div class="fake-svg png" ng-style="{'--icon-url': 'url(/images/folder-icons/ic_' + (item.icon || 'folder') + '.png)'}"></div>
+						<div ng-if="item.isRecent" class="history-badge"></div>
+					</div>
+					<div class="name" ng-bind-html="item.name | fuzzyMatch:listData.searchKeyword"></div>
+					<div class="right">
+						<div class="parent-name" ng-if="item.parentItem">{{item.parentItem.name}}</div>
+						<div ng-if="listData.selectedIds[item.id]" class="icon">
+							<div class="selected"></div>
+						</div>
+						<div
+							ng-hide="listData.searchKeyword || item.isRecent"
+							class="ic-btn collapse"
+							ng-class="{'rotate': !collapsedFolderIds[item.id], 'disabled': item.isRecent || !item.hasChildren}"
+							ng-click="$event.stopPropagation(); toggleExpand(item);"
+						>
+							<img ng-show="!item.isRecent && item.hasChildren" ng-src="/images/{{theme}}/icons/ic-panel-item-expand.svg" />
+						</div>
+					</div>
+				</div>
+			</div>
+		</select-panel-list>
+	</div>
+
+	<div class="panel-footer">
+		<div class="left" ng-if="!isMultipleSelectMode">
+			<div class="shortcut-tip">{{ 'collect-window.folder-select-panel.shortcut.multi-select' | i18n }}<key>{{ isMac ? "⌘" : "Ctrl" }}</key></div>
+			<div class="shortcut-tip">
+				{{ 'collect-window.folder-select-panel.shortcut.move' | i18n }}
+				<div class="keys"><key>↑</key><key>↓</key></div>
+			</div>
+			<div class="shortcut-tip">{{ 'collect-window.folder-select-panel.shortcut.select' | i18n }}<key>︎⏎</key></div>
+		</div>
+		<div class="collect-btn" ng-click="collectItems()" ng-if="isMultipleSelectMode">
+			<div class="icon download"></div>
+			<span>{{ 'collect-window.folder-select-panel.collect' | i18n }}</span>
+		</div>
+	</div>
+</select-panel>
+<select-panel-overlay ng-click="close()"></select-panel-overlay>

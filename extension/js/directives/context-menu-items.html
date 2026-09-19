@@ -1,0 +1,147 @@
+<div class="context-menu-items" ng-if="menu.sortable && menu.items.length">
+	<div ui-sortable="sortableOptions" ng-model="menu.items">
+		<div class="context-menu-item-wrap" ng-repeat="item in menu.items" ng-switch on="item.role">
+			<!-- 分割线 -->
+			<div ng-switch-when="separator" class="context-menu-separator"></div>
+
+			<!-- Toggle 列表 -->
+			<div
+				ng-switch-when="toggle"
+				class="context-menu-item"
+				ng-class="{'disabled': item.disabled, 'active': $index === menu.currentIndex && !item.disabled, 'has-submenu': item.submenu, 'checked': item.checked, 'unchecked': item.checked === false }"
+				ng-click="openItem(item)"
+				ng-mouseenter="hoverItem($index, menu)"
+			>
+				<div ng-if="menu.sortableHelper" class="drag-helper" ng-click="$event.stopPropagation();"><img ng-src="../..//images/{{theme}}/icons/ic-drag-help.svg" /></div>
+				<div class="icon" ng-if="item.icon"><img ng-src="../..//images/{{theme}}/icons/context-menu/{{::item.icon}}" /></div>
+				<div class="image" ng-if="item.image">
+					<img ng-src="{{item.image}}" ng-fallback-src="{{item.fallbackImage}}" />
+				</div>
+				<div class="label" ng-bind-html="item.label"></div>
+				<div class="right">
+					<div class="toggle-btn" style="width: 20px; height: 20px" ng-show="item.pinned" ng-click="$event.stopPropagation(); toggleItem(item)">
+						<img ng-src="../..//images/{{theme}}/icons/context-menu/ic-filter-pinned.svg" />
+					</div>
+					<div class="toggle-btn" style="width: 20px; height: 20px" ng-show="!item.pinned" ng-click="$event.stopPropagation(); toggleItem(item)">
+						<img ng-src="../..//images/{{theme}}/icons/context-menu/ic-filter-pin.svg" />
+					</div>
+				</div>
+			</div>
+			<!-- 一般状态 -->
+			<div
+				ng-switch-default
+				class="context-menu-item"
+				ng-class="{'disabled': item.disabled, 'active': $index === menu.currentIndex && !item.disabled, 'has-submenu': item.submenu || item.more, 'checked': item.checked, 'unchecked': item.checked === false }"
+				ng-click="openItem(item)"
+				ng-mouseenter="hoverItem($index, menu)"
+				ng-right-click="openMore(item)"
+			>
+				<div ng-if="menu.sortableHelper" class="drag-helper" ng-click="$event.stopPropagation();"><img ng-src="../..//images/{{theme}}/icons/ic-drag-help.svg" /></div>
+				<div class="icon" ng-if="item.icon"><img ng-src="../..//images/{{theme}}/icons/context-menu/{{::item.icon}}" /></div>
+				<div class="image" ng-if="item.image">
+					<img ng-src="{{item.image}}" ng-fallback-src="{{item.fallbackImage}}" />
+				</div>
+				<div class="label" ng-bind-html="item.label"></div>
+				<div class="right" ng-if="!item.more">
+					<div class="accelerator">{{::item.accelerator}}</div>
+					<div class="actions">
+						<div class="icon-checkbox"></div>
+						<!-- <div class="icon-arrow-right"><img ng-src="../..//images/{{theme}}/icons/context-menu/ic-context-menu-arrow-right.svg" /></div> -->
+					</div>
+				</div>
+				<div class="right" ng-if="item.more">
+					<div class="accelerator">{{::item.accelerator}}</div>
+					<div class="actions">
+						<div class="ic-btn icon-more" ng-click="$event.stopPropagation(); openMore(item)"><img ng-src="../..//images/{{theme}}/icons/context-menu/ic-context-menu-more.svg" /></div>
+					</div>
+				</div>
+				<!-- submenu hole -->
+				<div id="submenu-placeholder" ng-if="item.submenu && activeMenu === item.submenu"></div>
+			</div>
+		</div>
+	</div>
+	<div class="context-empty" ng-if="menu.items.length === 0">{{ 'collect-window.context-menu.search-empty' | i18n }}</div>
+</div>
+
+<div class="context-menu-items" ng-if="!menu.sortable">
+	<div class="context-menu-item-wrap" ng-repeat="item in menu.items" ng-switch on="item.role">
+		<!-- 分割线 -->
+		<div ng-switch-when="separator" class="context-menu-separator"></div>
+
+		<!-- 文字分割 -->
+		<div ng-switch-when="label" class="context-menu-label-item">{{::item.label}}</div>
+
+		<!-- 选色工具 -->
+		<div ng-switch-when="color" class="context-menu-color-item" ng-mouseenter="hoverItem($index, menu)">
+			<div class="circle" ng-click="item.click();"></div>
+			<div class="circle red" ng-click="item.click('red');"></div>
+			<div class="circle orange" ng-click="item.click('orange');"></div>
+			<div class="circle yellow" ng-click="item.click('yellow');"></div>
+			<div class="circle green" ng-click="item.click('green');"></div>
+			<div class="circle aqua" ng-click="item.click('aqua');"></div>
+			<div class="circle blue" ng-click="item.click('blue');"></div>
+			<div class="circle purple" ng-click="item.click('purple');"></div>
+			<div class="circle pink" ng-click="item.click('pink');"></div>
+		</div>
+
+		<!-- Toggle 列表 -->
+		<div
+			ng-switch-when="toggle"
+			class="context-menu-item"
+			ng-class="{'disabled': item.disabled, 'active': $index === menu.currentIndex && !item.disabled, 'has-submenu': item.submenu, 'checked': item.checked, 'unchecked': item.checked === false }"
+			ng-click="openItem(item)"
+			ng-mouseenter="hoverItem($index, menu)"
+		>
+			<div class="drag-helper" ng-click="$event.stopPropagation();"><img ng-src="../..//images/{{theme}}/icons/ic-drag-help.svg" /></div>
+			<div class="icon" ng-if="item.icon"><img ng-src="../..//images/{{theme}}/icons/context-menu/{{::item.icon}}" /></div>
+			<div class="image" ng-if="item.image">
+				<img ng-src="{{item.image}}" ng-fallback-src="{{item.fallbackImage}}" />
+			</div>
+			<div class="label" ng-bind-html="item.label"></div>
+			<div class="right">
+				<div class="toggle-btn" style="width: 20px; height: 20px" ng-show="item.pinned" ng-click="$event.stopPropagation(); toggleItem(item)">
+					<img ng-src="../..//images/{{theme}}/icons/context-menu/ic-filter-pinned.svg" />
+				</div>
+				<div class="toggle-btn" style="width: 20px; height: 20px" ng-show="!item.pinned" ng-click="$event.stopPropagation(); toggleItem(item)">
+					<img ng-src="../..//images/{{theme}}/icons/context-menu/ic-filter-pin.svg" />
+				</div>
+			</div>
+		</div>
+
+		<!-- 一般状态 -->
+		<div
+			ng-switch-default
+			class="context-menu-item"
+			ng-class="{'disabled': item.disabled, 'active': $index === menu.currentIndex && !item.disabled, 'has-submenu': item.submenu || item.more, 'checked': item.checked, 'unchecked': item.checked === false }"
+			ng-click="openItem(item)"
+			ng-mouseenter="hoverItem($index, menu)"
+		>
+			<div class="icon" ng-if="item.icon"><img ng-src="../..//images/{{theme}}/icons/context-menu/{{::item.icon}}" /></div>
+			<div class="image" ng-if="item.image">
+				<img ng-src="{{item.image}}" ng-fallback-src="{{item.fallbackImage}}" />
+			</div>
+			<div class="label" ng-bind-html="item.label"></div>
+			<div class="right" ng-if="!item.more">
+				<div class="accelerator">{{::item.accelerator}}</div>
+				<div class="actions">
+					<div class="icon-checkbox"></div>
+					<!-- <div class="icon-arrow-right"><img ng-src="../..//images/{{theme}}/icons/context-menu/ic-context-menu-arrow-right.svg" /></div> -->
+				</div>
+			</div>
+			<div class="right" ng-if="item.more">
+				<div class="accelerator">{{::item.accelerator}}</div>
+				<div class="actions">
+					<div class="ic-btn icon-more" ng-click="$event.stopPropagation(); openMore(item)"><img ng-src="../..//images/{{theme}}/icons/context-menu/ic-context-menu-more.svg" /></div>
+				</div>
+			</div>
+			<!-- submenu hole -->
+			<div id="submenu-placeholder" ng-if="item.submenu && activeMenu === item.submenu"></div>
+		</div>
+	</div>
+	<div class="context-empty" ng-if="menu.items.length === 0">{{ 'collect-window.context-menu.search-empty' | i18n }}</div>
+</div>
+<div class="context-menu-item-submenus">
+	<div ng-repeat="item in menu.items" ng-if="item.submenu && activeMenu === item.submenu" class="context-menu submenu open" auto-position-context-menu>
+		<context-menu-items menu="item.submenu" active-menu="activeMenu" search-keyword="searchKeyword" theme="theme"></context-menu-items>
+	</div>
+</div>

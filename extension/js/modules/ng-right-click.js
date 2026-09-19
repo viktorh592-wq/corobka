@@ -1,0 +1,1 @@
+angular.module("ngRightClick",[]).directive("ngRightClick",["$parse",function(c){return function(t,n,i){var e=c(i.ngRightClick);t.$on("$destroy",function(){n.off()}),n.bind("contextmenu",function(n){t.$apply(function(){n&&n.preventDefault(),e(t,{$event:n})})})}}]);

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html
+	lang="en"
+	ng-csp
+	ng-app="BatchSaverApp"
+	ng-controller="BatchSaverWindowController"
+	eagle-extension
+	eagle-extension-theme="{{ theme }}"
+	eagle-extension-locale="{{ $root.preference.getPreferredLocale() }}"
+	eagle-browser="{{ browserName }}"
+	ng-cloak
+>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title></title>
+		<link rel="stylesheet" href="../css/jquery-ui.min.css" />
+		<link rel="stylesheet" href="batch-saver-window.css" />
+	</head>
+	<body>
+		<div class="batch-saver-window">
+			<main>
+				<div class="left">
+					<div class="top-panel">
+						<div class="title">{{ 'batch-saver-window.title' | i18n }} <span>({{ batchSaver.selectedItemsCount }}/{{ batchSaver.itemsCount }})</span></div>
+						<div class="sliders-bar has-btn">
+							<div class="slider">
+								<div
+									class="ic-btn zoom-btn"
+									ng-click="batchSaver.zoomOut($event);"
+									tippy
+									tippy-content="{{'batch-saver-window.tools.zoom-out' | i18n}}{{ 'CmdOrCtrl' | shortcut }}{{ '－' | shortcut }}"
+									tippy-placement="bottom"
+								>
+									<img ng-src="/images/{{ theme }}/icons/zoom-out.svg" />
+								</div>
+								<div class="range-wrap">
+									<div class="range-progressbar">
+										<div class="current" style="width: {{(batchSaver.vsGridRepeatOptions.columnWidth - 125) / 175 * 100}}%"></div>
+									</div>
+									<input id="batch-save-panel-slider" class="range" type="range" name="points" min="125" max="300" step="5" tabindex="-1" ng-model="batchSaver.vsGridRepeatOptions.columnWidth" />
+								</div>
+								<div
+									class="ic-btn zoom-btn"
+									ng-click="batchSaver.zoomIn($event);"
+									tippy
+									tippy-content="{{ 'batch-saver-window.tools.zoom-in' | i18n }}{{ 'CmdOrCtrl' | shortcut }}{{ '＋' | shortcut }}"
+									tippy-placement="bottom"
+								>
+									<img ng-src="/images/{{ theme }}/icons/zoom-in.svg" />
+								</div>
+							</div>
+						</div>
+						<div class="tool-panel">
+							<div id="auto-loading-info" class="button" ng-click="startAutoDetect()">
+								<img ng-src="/images/{{theme}}/icons/ic-refresh.svg" />
+								<span class="button-text">
+									{{ 'batch-saver-window.tools.auto-loading-page' | i18n }}
+
+									<!-- <img ng-src="/images/{{theme}}/icons/ic-info.svg" /> -->
+
+									<div class="popover">
+										<img ng-src="/images/{{theme}}/auto-loading-info.png" alt="" srcset="" />
+										<div class="popover-info">
+											<div class="popover-title">{{ 'batch-saver-window.auto-loading-info.title' | i18n }}<key>D</key></div>
+											<div class="popover-description">{{ 'batch-saver-window.auto-loading-info.description' | i18n }}</div>
+										</div>
+									</div>
+								</span>
+							</div>
+							<div class="separator"></div>
+							<div class="button" ng-click="batchSaver.selectAll()" tippy tippy-content="{{'batch-saver-window.tools.select-all' | i18n}}{{ 'CmdOrCtrl' | shortcut }}{{ 'A' | shortcut }}" tippy-placement="bottom">
+								<img ng-src="/images/{{theme}}/icons/ic-selecte-all.svg" />
+							</div>
+							<div class="button" ng-click="batchSaver.selectOpposite()" tippy tippy-content="{{'batch-saver-window.tools.invert-select' | i18n}}" tippy-placement="bottom">
+								<img ng-src="/images/{{theme}}/icons/ic-selecte-opposite.svg" />
+							</div>
+						</div>
+					</div>
+					<rect-selector container="#grid-container" on-selection="onSelection(items)" on-selection-end="onSelectionEnd(event, items)" selection-items="batchSaver.vsGridItems"></rect-selector>
+
+					<div
+						id="grid-container"
+						class="grid-container"
+						vs-grid-repeat="group in batchSaver.groups"
+						vs-grid-repeat-options="batchSaver.vsGridRepeatOptions"
+						vs-grid-items="batchSaver.vsGridItems"
+						vs-grid-state="batchSaver.vsGridState"
+						allow-scroll
+						ng-mousedown="mouseDownOnGrid($event)"
+						ng-mouseup="mouseUpOnGrid($event)"
+					>
+						<group>
+							<h6 ng-click="collapse(group)">{{group.name}}</h6>
+						</group>
+						<item ng-click="toggleItem($event, item)" ng-class="{'selected': batchSaver.selectedItems[item.id] || batchSaver.temporarySelectedItems[item.id], 'small-radius': item.width < 24 || item.height < 24 }">
+							<div class="thumbnail">
+								<svg ng-if="item.status === 'pending'" class="spinner" width="16px" height="16px" viewBox="0 0 66 66" xmlns="http://www.w3.org/2000/svg">
+									<circle class="path" fill="none" stroke-width="3" stroke-linecap="round" cx="33" cy="33" r="30"></circle>
+								</svg>
+								<div class="image" ng-if="item.type === 'image'" ng-class="{'fit-width': item.width >= item.height, 'fit-height' : item.width <= item.height}">
+									<img lazy-load="{{ item.base64 || item.thumbnail || item.src }}" />
+								</div>
+								<div class="video" ng-if="item.type === 'video'" ng-class="{'fit-width': item.width >= item.height, 'fit-height' : item.width <= item.height}">
+									<video muted loop ng-src="{{ item.src }}" hover-play-video></video>
+								</div>
+							</div>
+							<div class="item-info">
+								<div class="title" ng-bind-html="item.title | fuzzyMatch:batchSaver.keyword"></div>
+								<div class="resolution" ng-show="item.status !== 'pending'">{{ item.width }} × {{ item.height }} / {{ item.ext }}</div>
+								<div class="resolution" ng-show="item.status === 'pending'">{{'batch-saver-window.resolution.pending' | i18n}}...</div>
+							</div>
+						</item>
+					</div>
+
+					<div ng-if="!batchSaver.isLoading && batchSaver.groups[0]['items'].length == 0" class="grid-container-empty">
+						<img ng-src="/images/{{ theme }}/batch-saver-search-empty.svg" />
+						<div class="title">{{ 'batch-saver-window.not-found.title' | i18n }}</div>
+						<div class="description">{{ 'batch-saver-window.not-found.description' | i18n }}</div>
+					</div>
+				</div>
+
+				<aside class="right">
+					<div class="top-panel">
+						<input
+							type="search"
+							id="keyword-input"
+							placeholder="{{ 'batch-saver-window.search' | i18n }}"
+							ng-model="batchSaver.keyword"
+							ng-change="batchSaver.changeKeyword(batchSaver.keyword)"
+							ng-model-options="{ debounce: { updateOn: 'default blur', 'default': 50, 'blur': 0 } }"
+						/>
+					</div>
+
+					<div class="main-panel" allow-scroll>
+						<section ng-show="batchSaver.rawItems.length > 0">
+							<div class="header" ng-click="batchSaver.toggleSection('resolution')">
+								<div class="title">{{ 'batch-saver-window.resolution.title' | i18n }}</div>
+								<span class="btn-expand" ng-class="{ 'active': batchSaver.expandState['resolution'] }">
+									<img ng-src="/images/{{ theme }}/icons/ic-panel-item-expand.svg" />
+								</span>
+							</div>
+							<div class="body" ng-show="batchSaver.expandState['resolution']">
+								<div
+									class="filter"
+									ng-click="batchSaver.toggleFilter('resolution', 'large')"
+									ng-class="{ 'active': batchSaver.filter.resolution.enabled.large, 'disabled': batchSaver.filter.resolution.available['large'] === 0 }"
+								>
+									<span>{{ 'batch-saver-window.resolution.large' | i18n }}</span>
+									<span class="selected-count" ng-show="batchSaver.filter.resolution.selected.large > 0">{{ batchSaver.filter.resolution.selected.large }}/</span>
+									<span class="total-count">{{ batchSaver.filter.resolution.available.large }}</span>
+								</div>
+
+								<div
+									class="filter"
+									ng-click="batchSaver.toggleFilter('resolution', 'medium')"
+									ng-class="{ 'active': batchSaver.filter.resolution.enabled.medium, 'disabled': batchSaver.filter.resolution.available['medium'] === 0 }"
+								>
+									<span>{{ 'batch-saver-window.resolution.medium' | i18n }}</span>
+									<span class="selected-count" ng-show="batchSaver.filter.resolution.selected.medium > 0">{{ batchSaver.filter.resolution.selected.medium }}/</span>
+									<span class="total-count">{{ batchSaver.filter.resolution.available.medium }}</span>
+								</div>
+
+								<div
+									class="filter"
+									ng-click="batchSaver.toggleFilter('resolution', 'small')"
+									ng-class="{ 'active': batchSaver.filter.resolution.enabled.small, 'disabled': batchSaver.filter.resolution.available['small'] === 0 }"
+								>
+									<span>{{ 'batch-saver-window.resolution.small' | i18n }}</span>
+									<span class="selected-count" ng-show="batchSaver.filter.resolution.selected.small > 0">{{ batchSaver.filter.resolution.selected.small }}/</span>
+									<span class="total-count">{{ batchSaver.filter.resolution.available.small }}</span>
+								</div>
+
+								<div class="filter" ng-show="batchSaver.filter.resolution.available['pending'] > 0" ng-class="{ 'active': batchSaver.filter.resolution.enabled.pending }">
+									<span>{{ 'batch-saver-window.resolution.pending' | i18n }}</span>
+									<span class="selected-count" ng-show="batchSaver.filter.resolution.selected.pending > 0">{{ batchSaver.filter.resolution.selected.pending }}/</span>
+									<span class="total-count">{{ batchSaver.filter.resolution.available.pending }}</span>
+								</div>
+
+								<div class="filter" ng-click="batchSaver.toggleCustomizeResolution()" ng-class="{ 'active': batchSaver.filter.resolution.enabled.customize }">
+									<span>{{ 'batch-saver-window.resolution.customize' | i18n }}</span>
+									<span></span>
+								</div>
+
+								<div ng-if="batchSaver.filter.resolution.enabled.customize" class="customize-resolution-filter">
+									<span>{{ 'batch-saver-window.resolution.width' | i18n }}</span>
+									<input
+										type="number"
+										ng-model="batchSaver.filter.resolution.customize.minWidth"
+										ng-change="batchSaver.onCustomizeFilterChange()"
+										placeholder="{{ 'batch-saver-window.resolution.placeholder.min' | i18n }}"
+										min="0"
+										max="{{ batchSaver.MAX_WIDTH }}"
+									/>
+									<span>-</span>
+									<input
+										type="number"
+										ng-model="batchSaver.filter.resolution.customize.maxWidth"
+										ng-change="batchSaver.onCustomizeFilterChange()"
+										placeholder="{{ 'batch-saver-window.resolution.placeholder.max' | i18n }}"
+										min="0"
+										max="{{ batchSaver.MAX_WIDTH }}"
+									/>
+								</div>
+
+								<div ng-if="batchSaver.filter.resolution.enabled.customize" class="customize-resolution-filter">
+									<span>{{ 'batch-saver-window.resolution.height' | i18n }}</span>
+									<input
+										type="number"
+										ng-model="batchSaver.filter.resolution.customize.minHeight"
+										ng-change="batchSaver.onCustomizeFilterChange()"
+										placeholder="{{ 'batch-saver-window.resolution.placeholder.min' | i18n }}"
+										min="0"
+									/>
+									<span>-</span>
+									<input
+										type="number"
+										ng-model="batchSaver.filter.resolution.customize.maxHeight"
+										ng-change="batchSaver.onCustomizeFilterChange()"
+										placeholder="{{ 'batch-saver-window.resolution.placeholder.max' | i18n }}"
+										min="0"
+									/>
+								</div>
+							</div>
+						</section>
+
+						<section ng-show="batchSaver.rawItems.length > 0">
+							<div class="header" ng-click="batchSaver.toggleSection('format')">
+								<div class="title">{{ 'batch-saver-window.format.title' | i18n }}</div>
+								<span class="btn-expand" ng-class="{ 'active': batchSaver.expandState['format'] }">
+									<img ng-src="/images/{{ theme }}/icons/ic-panel-item-expand.svg" />
+								</span>
+							</div>
+							<div class="body" ng-show="batchSaver.expandState['format']">
+								<div
+									class="filter"
+									ng-click="batchSaver.toggleFilter('format', ext)"
+									ng-class="{ 'active': batchSaver.filter.format.enabled[ext] }"
+									ng-repeat="ext in batchSaver.supportExts"
+									ng-show="batchSaver.filter.format.available[ext] > 0"
+								>
+									<span>{{ ext }}</span>
+									<span class="selected-count" ng-show="batchSaver.filter.format.selected[ext] > 0">{{ batchSaver.filter.format.selected[ext] }}/</span>
+									<span class="total-count">{{ batchSaver.filter.format.available[ext] }}</span>
+								</div>
+							</div>
+						</section>
+						<section ng-show="batchSaver.rawItems.length > 0 && showDomainFilter()">
+							<div class="header" ng-click="batchSaver.toggleSection('domain')">
+								<div class="title">{{ 'batch-saver-window.domain.title' | i18n }}</div>
+								<span class="btn-expand" ng-class="{ 'active': batchSaver.expandState['domain'] }">
+									<img ng-src="/images/{{ theme }}/icons/ic-panel-item-expand.svg" />
+								</span>
+							</div>
+							<div class="body" ng-show="batchSaver.expandState['domain']">
+								<div
+									class="filter"
+									ng-click="batchSaver.toggleFilter('domain', domain)"
+									ng-class="{ 'active': batchSaver.filter.domain.enabled[domain] }"
+									ng-repeat="(domain, domainAmount) in batchSaver.filter.domain.available"
+								>
+									<span>{{ domain }}</span>
+									<span class="selected-count" ng-show="batchSaver.filter.domain.selected[domain] > 0">{{ batchSaver.filter.domain.selected[domain] }}/</span>
+									<span class="total-count">{{ batchSaver.filter.domain.available[domain] }}</span>
+								</div>
+							</div>
+						</section>
+
+						<section>
+							<div class="header" ng-click="batchSaver.toggleSection('folder')">
+								<div class="title">{{ 'batch-saver-window.folder.title' | i18n }}</div>
+								<span class="btn-expand" ng-class="{ 'active': batchSaver.expandState['folder'] }">
+									<img ng-src="/images/{{ theme }}/icons/ic-panel-item-expand.svg" />
+								</span>
+							</div>
+							<div class="body" ng-show="batchSaver.expandState['folder']">
+								<div class="label-container">
+									<div class="label-item color-{{ folder.iconColor }}" ng-repeat="folder in selectedFolders track by $index" title="{{ folder.name }}">
+										<span class="label-item-name ng-binding">{{ folder.name }}</span>
+										<div class="ic-btn label-item-remove-btn" ng-click="removeFolder(folder)">
+											<img ng-src="/images/{{theme}}/icons/ic-inspector-remove-label.svg" />
+										</div>
+									</div>
+
+									<!-- 無資料狀態 -->
+									<div
+										ng-if="selectedFolders.length == 0"
+										ng-click="$event.stopPropagation(); openFolderSelect($event)"
+										class="ic-btn has-bg create-label-btn full-width"
+										tippy
+										tippy-content="{{ 'batch-saver-window.add-folder' | i18n }}{{ 'F' | shortcut }}"
+										tippy-placement="bottom"
+									>
+										<img ng-src="/images/{{theme}}/icons/ic-inspector-add-label.svg" /><span>{{ 'batch-saver-window.add-folder' | i18n }}</span>
+									</div>
+
+									<!-- 已有資料狀態 -->
+									<div
+										ng-if="selectedFolders.length > 0"
+										ng-click="$event.stopPropagation(); openFolderSelect($event)"
+										class="ic-btn create-label-btn"
+										tippy
+										tippy-content="{{ 'batch-saver-window.add-folder' | i18n }}{{ 'F' | shortcut }}"
+										tippy-placement="bottom"
+									>
+										<img ng-src="/images/{{theme}}/icons/ic-inspector-add-label.svg" />
+									</div>
+								</div>
+							</div>
+						</section>
+
+						<section ng-if="extendTags.length > 0">
+							<div class="header" ng-click="batchSaver.toggleSection('tag')">
+								<div class="title">{{ 'batch-saver-window.auto-tag.title' | i18n }}</div>
+							</div>
+							<div class="body">
+								<div class="label-container">
+									<div class="label-item full-item color-{{ tagsMap[tag].color }}" ng-repeat="tag in extendTags track by $index" title="{{ ::(tagsMap[tag].name || tag) }}">
+										<span class="label-item-name ng-binding">{{ tagsMap[tag].name || tag | limitTo:200}}</span>
+									</div>
+								</div>
+							</div>
+						</section>
+
+						<section>
+							<div class="header" ng-click="batchSaver.toggleSection('tag')">
+								<div class="title">{{ 'batch-saver-window.tag.title' | i18n }}</div>
+								<span class="btn-expand" ng-class="{ 'active': batchSaver.expandState['tag'] }">
+									<img ng-src="/images/{{ theme }}/icons/ic-panel-item-expand.svg" />
+								</span>
+							</div>
+							<div class="body" ng-show="batchSaver.expandState['tag']">
+								<div class="label-container">
+									<div class="label-item color-{{ tagsMap[tag].color }}" ng-repeat="tag in selectedTags track by $index" title="{{ ::(tagsMap[tag].name || tag) }}">
+										<span class="label-item-name ng-binding">{{ tagsMap[tag].name || tag | limitTo:200}}</span>
+										<div class="ic-btn label-item-remove-btn" ng-click="removeTag(tag)">
+											<img ng-src="/images/{{theme}}/icons/ic-inspector-remove-label.svg" />
+										</div>
+									</div>
+
+									<!-- 無資料狀態 -->
+									<div
+										ng-if="selectedTags.length == 0"
+										ng-click="$event.stopPropagation(); openTagSelect($event)"
+										class="ic-btn has-bg create-label-btn full-width"
+										tippy
+										tippy-content="{{ 'batch-saver-window.add-tag' | i18n }}{{ 'T' | shortcut }}"
+										tippy-placement="bottom"
+									>
+										<img ng-src="/images/{{theme}}/icons/ic-inspector-add-label.svg" /><span>{{ 'batch-saver-window.add-tag' | i18n }}</span>
+									</div>
+
+									<!-- 已有資料狀態 -->
+									<div
+										ng-if="selectedTags.length > 0"
+										ng-click="$event.stopPropagation(); openTagSelect($event)"
+										class="ic-btn create-label-btn"
+										tippy
+										tippy-content="{{ 'batch-saver-window.add-tag' | i18n }}{{ 'T' | shortcut }}"
+										tippy-placement="bottom"
+									>
+										<img ng-src="/images/{{theme}}/icons/ic-inspector-add-label.svg" />
+									</div>
+								</div>
+							</div>
+						</section>
+					</div>
+					<div class="action-panel">
+						<div class="btn btn-download" tippy tippy-content="{{ 'CmdOrCtrl + Enter' | shortcut }}" tippy-placement="top" ng-click="download()" ng-class="{ 'btn-disabled': batchSaver.selectedItemsCount === 0}">
+							<img ng-src="/images/base/icons/ic-download.png" />
+							<div class="button-text">
+								<span>{{ 'batch-saver-window.download' | i18n }}</span>
+								<span ng-if="batchSaver.selectedItemsCount > 0">({{ batchSaver.selectedItemsCount }})</span>
+							</div>
+						</div>
+						<!-- <div class="btn btn-cancel" ng-click="close()">{{ 'batch-saver-window.cancel' | i18n }}</div> -->
+					</div>
+				</aside>
+			</main>
+		</div>
+		<div class="batch-saver-window-overlay" ng-click="closeWindow()"></div>
+
+		<folder-select-panel theme="theme"></folder-select-panel>
+		<tag-select-panel theme="theme"></tag-select-panel>
+
+		<context-menu theme="theme"></context-menu>
+
+		<script src="../js/lib/api/eagle.js"></script>
+		<script src="../js/lib/api/utils.js"></script>
+		<script src="../js/lib/api/env.js"></script>
+		<script src="../js/lib/api/storage.js"></script>
+		<script src="../js/lib/api/crypto.js"></script>
+		<script src="../js/lib/api/runtime.js"></script>
+		<script src="../js/lib/api/extension.js"></script>
+		<script src="../js/lib/api/preference.js"></script>
+		<script src="../js/lib/api/i18n.js"></script>
+		<script src="../js/lib/api/fetch.js"></script>
+		<script src="../js/lib/api/file-type-detector.js"></script>
+		<script src="../js/lib/api/url-enlarger.js"></script>
+		<script src="../js/lib/api/folder.js"></script>
+		<script src="../js/lib/api/library.js"></script>
+		<script src="../js/lib/api/tag.js"></script>
+		<script src="../js/lib/api/item.js"></script>
+		<script src="../js/lib/api/swal-dialog.js"></script>
+
+		<!-- 外部套件 -->
+		<script src="/js/vendors/jquery.min.js"></script>
+		<script src="/js/vendors/jquery-ui.min.js"></script>
+		<script src="/js/vendors/angular.min.js"></script>
+		<script src="/js/vendors/sweetalert2.all.min.js"></script>
+		<script src="/js/vendors/popper.min.js"></script>
+		<script src="/js/vendors/tippy.min.js"></script>
+		<script src="/js/vendors/chinese_convert.js"></script>
+		<script src="/js/vendors/pinyinlite.js"></script>
+		<script src="/js/vendors/tiny-pinyin.js"></script>
+		<script src="/js/vendors/mousetrap.min.js"></script>
+
+		<!-- 共用元件 -->
+		<script src="/js/modules/i18n.js"></script>
+		<script src="/js/modules/tippy.js"></script>
+		<script src="/js/modules/ng-right-click.js"></script>
+		<script src="/js/modules/shortcut.js"></script>
+		<script src="/js/directives/context-menu.js"></script>
+		<script src="/js/directives/select-panel.js"></script>
+		<script src="/js/directives/tag-select-panel.js"></script>
+		<script src="/js/modules/vs-repeat.js"></script>
+		<script src="/js/modules/vs-repeat-auto-scroll.js"></script>
+		<script src="/js/directives/vs-grid-repeat.js"></script>
+
+		<script src="js/directives/folder-select-panel.js"></script>
+		<script src="js/directives/rect-selector.js"></script>
+		<script src="js/directives/hover-play-video.js"></script>
+
+		<!-- 主程式 -->
+		<script src="js/controllers/batch-saver-window.js"></script>
+		<script src="js/batch-saver-item.js"></script>
+		<script src="js/batch-saver.js"></script>
+		<script src="js/enlarge-proxy.js"></script>
+	</body>
+</html>

@@ -1,0 +1,102 @@
+<select-panel id="folder-select-panel" class="select-panel folder-select-panel max-depth-{{listData.maxDepth}}" ng-mouseup="focusSearchInput()">
+	<div class="panel-header">
+		<!-- 搜索框 -->
+		<div class="search">
+			<input id="folder-select-panel-search-input" type="search" placeholder="{{ 'folder-select-panel.search-folder' | i18n }}" />
+		</div>
+
+		<div class="tabs">
+			<!-- 全部 -->
+			<div class="tab" ng-click="changeTab('ALL')" ng-class="{'active': listData.currentTab === 'ALL'}" tippy tippy-placement="top" tippy-content="{{'folder-select-panel.tabs.all' | i18n}}">
+				<img ng-src="/images/{{theme}}/icons/ic-folder-select-all.svg" />
+			</div>
+			<!-- 最近使用 -->
+			<div class="tab" ng-click="changeTab('RECENT')" ng-class="{'active': listData.currentTab === 'RECENT'}" tippy tippy-placement="top" tippy-content="{{'folder-select-panel.tabs.recent' | i18n}}">
+				<img ng-src="/images/{{theme}}/icons/ic-folder-select-recent.svg" />
+			</div>
+			<!-- 已选 -->
+			<div class="tab" ng-click="changeTab('SELECTED')" ng-class="{'active': listData.currentTab === 'SELECTED'}" tippy tippy-placement="top" tippy-content="{{'folder-select-panel.tabs.selected' | i18n}}">
+				<img ng-src="/images/{{theme}}/icons/ic-folder-select-selected.svg" />
+			</div>
+		</div>
+	</div>
+
+	<!-- 空状态 -->
+	<div class="panel-empty" ng-if="listData.items.length == 0">
+		<span>{{ 'folder-select-panel.empty' | i18n }}</span>
+	</div>
+
+	<!-- 项目列表 -->
+	<div ng-hide="listData.items.length == 0" class="panel-list" vs-auto-scroll index="listData.currentIndex" scroll-container="#folder-select-panel [vs-repeat]">
+		<select-panel-list vs-excess="78" vs-repeat="26" vs-size="size" allow-scroll>
+			<div
+				class="select-panel-item"
+				ng-class="{'active': item.index == listData.currentIndex, 'checked': listData.selectedIds[item.id] }"
+				ng-repeat="item in listData.items"
+				ng-click="openItem($event, item)"
+				ng-mouseenter="hoverItem(item)"
+				ng-switch
+				on="item.type"
+			>
+				<!-- 分隔線 -->
+				<div class="separator" ng-switch-when="separator"></div>
+
+				<!-- 建立資料夾 -->
+				<div ng-switch-when="create" class="list-item" style="height: 26px; line-height: 26px" ng-class="{'active': item.index == listData.currentIndex}">
+					<div class="checkbox">
+						<img ng-src="/images/{{theme}}/icons/ic-folder-select-create.svg" />
+					</div>
+					<div class="icon"><div class="fake-svg png"></div></div>
+					<div class="name">{{'folder-select-panel.new-folder-btn' | i18n}} "<b>{{item.name}}</b>"</div>
+				</div>
+
+				<!-- 選擇資料夾 -->
+				<div
+					ng-switch-default
+					class="list-item depth-{{item.depth}} color-{{item.iconColor}} icon-{{item.icon}} has-icon"
+					style="height: 26px; line-height: 26px"
+					ng-class="{ 'active': item.index == listData.currentIndex,  'selected': listData.selectedIds[item.id], 'search-mode': listData.currentTab === 'SELECTED' || listData.searchKeyword.length > 0 }"
+					ng-right-click="$event.stopPropagation(); openItemSubmenu(item);"
+				>
+					<div class="guidelines" ng-if="!item.isRecent">
+						<div class="guideline color-{{line}} depth-{{$index + 1}}" ng-hide="item.depth === $index" ng-repeat="line in item.guidelines track by $index">
+							<div class="top"></div>
+							<div class="middle"></div>
+							<div class="bottom"></div>
+						</div>
+					</div>
+					<div class="checkbox"><div class="check-icon"></div></div>
+					<div class="icon">
+						<div class="fake-svg png" ng-style="{'--icon-url': 'url(/images/folder-icons/ic_' + (item.icon || 'folder') + '.png)'}"></div>
+						<div ng-if="item.isRecent" class="history-badge"></div>
+					</div>
+					<div class="name" ng-bind-html="item.name | fuzzyMatch:listData.searchKeyword"></div>
+					<div class="right">
+						<div class="parent-name" ng-if="item.parentItem">{{item.parentItem.name}}</div>
+						<!-- <div class="ic-btn" ng-click="$event.stopPropagation(); openItemSubmenu(item);">
+                            <img ng-src="/images/{{theme}}/icons/ic-more.svg">
+                        </div> -->
+						<div ng-hide="listData.searchKeyword" class="ic-btn collapse" ng-class="{'rotate': !collapsedFolderIds[item.id]}" ng-click="$event.stopPropagation(); toggleExpand(item);">
+							<img ng-show="!item.isRecent && item.hasChildren" ng-src="/images/{{theme}}/icons/ic-panel-item-expand.svg" />
+						</div>
+					</div>
+				</div>
+			</div>
+		</select-panel-list>
+	</div>
+
+	<div class="panel-footer">
+		<div class="left">
+			<div class="shortcut-tip">{{'folder-select-panel.shortcuts.switch' | i18n}}<key>Tab</key></div>
+			<div class="shortcut-tip">
+				{{'folder-select-panel.shortcuts.move' | i18n}}
+				<div class="keys"><key>↑</key><key>↓</key></div>
+			</div>
+			<div class="shortcut-tip">{{'folder-select-panel.shortcuts.select' | i18n}}<key>︎⏎</key></div>
+		</div>
+		<div class="right">
+			<div class="shortcut-tip">{{'folder-select-panel.shortcuts.close' | i18n}}<key>︎ESC</key></div>
+		</div>
+	</div>
+</select-panel>
+<select-panel-overlay ng-click="close()"></select-panel-overlay>

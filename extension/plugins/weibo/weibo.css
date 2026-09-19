@@ -1,0 +1,24 @@
+.WB_feed_v3 .WB_media_a li:after {
+	pointer-events: none;
+}
+
+.imgInstance img {
+	-webkit-user-drag: initial !important;
+}
+
+/* 修正weibo不能拖拉 */
+div.woo-picture-main .woo-picture-hoverMask + .woo-picture-slot {
+	pointer-events: all;
+}
+
+img + .woo-picture-cover + .woo-picture-hoverMask + .woo-picture-slot {
+	pointer-events: none;
+}
+
+img + .woo-picture-cover + .woo-picture-hoverMask + .woo-picture-slot video {
+	pointer-events: all;
+}
+
+.woo-picture-main img.woo-picture-img[src^="data:image/svg+xml;"] {
+	pointer-events: none;
+}

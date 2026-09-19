@@ -1,0 +1,1 @@
+class Eagle{runtime;tabs;constructor(){}}var eagle=new Eagle;

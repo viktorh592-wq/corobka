@@ -1,0 +1,17 @@
+<svg width="160" height="118" viewBox="0 0 160 118" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Коробка (передняя часть, тёмная тема): закрытая коробка -->
+  <rect x="30" y="52" width="100" height="44" rx="7" fill="url(#kBoxTopD)">
+    <linearGradient id="kBoxTopD" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E8A94C"/>
+      <stop offset="1" stop-color="#CE8526"/>
+    </linearGradient>
+  </rect>
+  <rect x="30" y="70" width="100" height="44" rx="7" fill="url(#kBoxBodyD)">
+    <linearGradient id="kBoxBodyD" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#DE9838"/>
+      <stop offset="1" stop-color="#B26A18"/>
+    </linearGradient>
+  </rect>
+  <rect x="72" y="70" width="16" height="44" fill="#F2C888" opacity="0.6"/>
+  <rect x="33" y="74" width="94" height="5" rx="2.5" fill="#FFFFFF" opacity="0.25"/>
+</svg>

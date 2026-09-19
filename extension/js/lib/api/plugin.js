@@ -1,0 +1,1 @@
+class MetaPlugin{plugins=[];register(e,n){this.plugins.push({domainRegex:e,plugin:n})}get(e){for(var{domainRegex:n,plugin:t}of this.plugins)if(new RegExp(n).test(e))return t;return null}}class SitePlugin{disableBatchSaver=!1;inject(){throw new Error("Not implemented")}getMeta(){throw new Error("Not implemented")}}eagle.plugin=new MetaPlugin;

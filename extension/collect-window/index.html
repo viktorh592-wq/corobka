@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" ng-csp ng-app="CollectApp" ng-controller="CollectController" eagle-extension eagle-extension-theme="{{ theme }}" eagle-extension-locale="{{ $root.preference.getPreferredLocale() }}" eagle-browser="{{ browserName }}">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title></title>
+		<link rel="stylesheet" href="../css/jquery-ui.min.css" />
+		<link rel="stylesheet" href="collect-window.css" />
+	</head>
+	<body>
+		<div class="collect-window" ng-class="{'open': isOpen}" ng-click="focusFolderInput()">
+			<div class="left">
+				<!-- 預覽區 -->
+				<div class="thumbnail" style="aspect-ratio: {{ collectItem.width }}/{{ collectItem.height }};">
+					<img ng-if="collectItem.type == 'save-url'" ng-src="{{ collectItem.src }}" />
+					<img ng-if="collectItem.type == 'image'" lazy-load="{{ collectItem.src }}" />
+					<video ng-if="collectItem.type == 'video'" ng-src="{{ collectItem.src }}" autoplay muted loop></video>
+					<audio ng-if="collectItem.type == 'audio'" ng-src="{{ collectItem.src }}" controls></audio>
+
+					<div class="resolution" ng-if="collectItem.status != 'done'">
+						<svg class="spinner" width="13px" height="13px" viewBox="0 0 66 66" xmlns="http://www.w3.org/2000/svg">
+							<circle class="path" fill="transparent" stroke="#fff" stroke-width="5" stroke-linecap="round" cx="33" cy="33" r="30"></circle>
+						</svg>
+					</div>
+					<div class="resolution" ng-if="collectItem.status == 'done' && collectItem.type != 'audio'">{{ collectItem.width }}×{{ collectItem.height }}</div>
+				</div>
+
+				<!-- 星等 -->
+				<div class="rating-container star-{{collectItem.star}}">
+					<div ng-click="changeStar(1)"></div>
+					<div ng-click="changeStar(2)"></div>
+					<div ng-click="changeStar(3)"></div>
+					<div ng-click="changeStar(4)"></div>
+					<div ng-click="changeStar(5)"></div>
+				</div>
+				<!-- 名稱 -->
+				<div
+					data-placeholder="{{ 'collect-window.title' | i18n }}"
+					contenteditable="true"
+					plaintext-only="true"
+					no-line-breaks="true"
+					maxlength="255"
+					ng-model="collectItem.title"
+					strip-br="true"
+					tabindex="0"
+					ng-click="$event.stopPropagation()"
+					allow-scroll
+				></div>
+				<!-- 註釋 -->
+				<div
+					data-placeholder="{{ 'collect-window.annotation' | i18n }}"
+					contenteditable="true"
+					plaintext-only="true"
+					maxlength="8192"
+					ng-model="collectItem.annotation"
+					strip-br="false"
+					tabindex="0"
+					ng-click="$event.stopPropagation()"
+					class="annotation"
+					allow-scroll
+				></div>
+
+				<div class="separator"></div>
+
+				<div class="label-container" allow-scroll>
+					<div class="label-item color-{{tagsMap[tag].color}}" ng-repeat="tag in collectItem.tags track by $index" title="{{ ::(tagsMap[tag].name || tag) }}">
+						<span class="label-item-name">{{ tagsMap[tag].name || tag | limitTo:200}}</span>
+						<div class="ic-btn label-item-remove-btn" ng-click="removeTag(tag)">
+							<img ng-src="/images/{{theme}}/icons/ic-inspector-remove-label.svg" />
+						</div>
+					</div>
+
+					<!-- （空狀態） -->
+					<div ng-click="$event.stopPropagation(); openTagSelect($event)" ng-if="collectItem.tags.length === 0" class="ic-btn has-bg create-label-btn full-width">
+						<img ng-src="/images/{{theme}}/icons/ic-inspector-add-label.svg" /><span>{{ 'collect-window.add-tag' | i18n }}</span>
+					</div>
+
+					<!-- （已有資料狀態） -->
+					<div ng-click="$event.stopPropagation(); openTagSelect($event)" ng-if="collectItem.tags.length > 0" class="ic-btn create-label-btn">
+						<img ng-src="/images/{{theme}}/icons/ic-inspector-add-label.svg" />
+					</div>
+				</div>
+			</div>
+
+			<div class="right">
+				<folder-select-panel theme="theme"></folder-select-panel>
+
+				<!-- 載入提示 -->
+				<div class="loader-overlay" ng-show="isLoadingData">
+					<div class="loader">
+						<svg class="spinner" width="32px" height="32px" viewBox="0 0 66 66" xmlns="http://www.w3.org/2000/svg">
+							<circle class="path" fill="none" stroke-width="3" stroke-linecap="round" cx="33" cy="33" r="30"></circle>
+						</svg>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<tag-select-panel theme="theme"></tag-select-panel>
+
+		<context-menu theme="theme"></context-menu>
+
+		<script src="../js/lib/api/eagle.js"></script>
+		<script src="../js/lib/api/utils.js"></script>
+		<script src="../js/lib/api/env.js"></script>
+		<script src="../js/lib/api/storage.js"></script>
+		<script src="../js/lib/api/crypto.js"></script>
+		<script src="../js/lib/api/runtime.js"></script>
+		<script src="../js/lib/api/extension.js"></script>
+		<script src="../js/lib/api/preference.js"></script>
+		<script src="../js/lib/api/i18n.js"></script>
+		<script src="../js/lib/api/fetch.js"></script>
+		<script src="../js/lib/api/url-enlarger.js"></script>
+		<script src="../js/lib/api/folder.js"></script>
+		<script src="../js/lib/api/library.js"></script>
+		<script src="../js/lib/api/tag.js"></script>
+		<script src="../js/lib/api/item.js"></script>
+		<script src="../js/lib/api/swal-dialog.js"></script>
+
+		<!-- 外部套件 -->
+		<script src="/js/vendors/jquery.min.js"></script>
+		<script src="/js/vendors/jquery-ui.min.js"></script>
+		<script src="/js/vendors/angular.min.js"></script>
+		<script src="/js/vendors/sweetalert2.all.min.js"></script>
+		<script src="/js/vendors/popper.min.js"></script>
+		<script src="/js/vendors/tippy.min.js"></script>
+		<script src="/js/vendors/chinese_convert.js"></script>
+		<script src="/js/vendors/pinyinlite.js"></script>
+		<script src="/js/vendors/tiny-pinyin.js"></script>
+
+		<!-- 共用元件 -->
+		<script src="/js/modules/i18n.js"></script>
+		<script src="/js/modules/tippy.js"></script>
+		<script src="/js/modules/ng-right-click.js"></script>
+		<script src="/js/directives/context-menu.js"></script>
+		<script src="/js/directives/select-panel.js"></script>
+		<script src="/js/directives/tag-select-panel.js"></script>
+		<script src="js/directives/folder-select-panel.js"></script>
+
+		<!-- 相依元件 -->
+		<script src="js/modules/angular-contenteditable.js"></script>
+		<script src="js/modules/stop-wheel.js"></script>
+		<script src="/js/modules/vs-repeat.js"></script>
+		<script src="/js/modules/vs-repeat-auto-scroll.js"></script>
+		<script src="/js/directives/vs-grid-repeat.js"></script>
+
+		<!-- 主程式 -->
+		<script src="js/controllers/collect.js"></script>
+		<script src="js/directives/library-switcher.js"></script>
+		<script src="js/directives/fallback-src.js"></script>
+		<script src="js/models/collect-item.js"></script>
+	</body>
+</html>

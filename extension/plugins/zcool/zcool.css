@@ -1,0 +1,9 @@
+.photoInformationContent .pictureBox img,
+.ReactModalPortal .img-box img,
+.ReactModalPortal .info-box img {
+	-webkit-user-drag: initial !important;
+}
+
+.ReactModalPortal .info-box .thumbnail::after {
+	pointer-events: none;
+}

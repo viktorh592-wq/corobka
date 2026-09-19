@@ -1,0 +1,1 @@
+angular.module("stopWheel",[]).directive("stopWheel",["$timeout",function(e){return{restrict:"A",link:function(e,t,i){t[0].addEventListener("wheel",function(e){var t=e["deltaY"],{scrollTop:i,scrollHeight:l,clientHeight:n}=this;(0<t&&l<=i+n||t<0&&i<=0)&&e.preventDefault()},{passive:!1})}}}]);

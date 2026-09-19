@@ -1,0 +1,1 @@
+angular.module("i18n",[]).filter("i18n",["$sce",e=>{function t(t){return e.trustAsHtml(eagle.i18n.words[t])||""}return t.$stateful=!0,t}]);

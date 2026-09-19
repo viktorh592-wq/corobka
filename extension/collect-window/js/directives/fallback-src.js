@@ -1,0 +1,1 @@
+EagleApp.directive("ngFallbackSrc",function(){return{link:function(c,n,r){n.bind("error",function(){r.src!==r.ngFallbackSrc&&r.$set("src",r.ngFallbackSrc)})}}});

@@ -1,0 +1,14 @@
+<svg width="132" height="34" viewBox="0 0 132 34" xmlns="http://www.w3.org/2000/svg">
+  <g>
+    <rect x="2" y="14" width="22" height="16" rx="3.2" fill="#DE9838"/>
+    <rect x="2" y="12.4" width="22" height="6.2" rx="2.4" fill="#E8A94C"/>
+    <rect x="10.6" y="12.4" width="4.8" height="17.6" fill="#F2C888"/>
+    <g transform="translate(5.5,2) rotate(-8)">
+      <rect x="0" y="0" width="7" height="11" rx="1.4" fill="#5FA6E8" stroke="#E8E8E8" stroke-width="1.1"/>
+    </g>
+    <g transform="translate(13.5,0.5) rotate(7)">
+      <rect x="0" y="0" width="7" height="12" rx="1.4" fill="#E8A93C" stroke="#E8E8E8" stroke-width="1.1"/>
+    </g>
+  </g>
+  <text x="32" y="25" font-family="'SF Pro Text',system-ui,'Segoe UI',Roboto,Arial,sans-serif" font-size="20" font-weight="700" fill="#F2F4F8">Коробка</text>
+</svg>

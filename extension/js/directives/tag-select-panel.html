@@ -1,0 +1,207 @@
+<select-panel class="select-panel tag-select-panel" ng-mouseup="panel.focusSearchInput()" ng-class="{'has-sidebar' : panel.isShowSidebar && listData.tagGroups.length > 0}">
+	<div class="panel-header">
+		<!-- 搜索框 -->
+		<div class="search">
+			<input id="tag-select-panel-search-input" type="search" maxlength="128" placeholder="{{'general.search' | i18n}}" />
+		</div>
+
+		<!-- 隱藏側欄按鈕 -->
+		<div class="ic-btn" ng-class="{'active': panel.isShowSidebar}" ng-click="panel.toggleSidebar()" ng-show="listData.tagGroups.length > 0">
+			<img ng-src="/images/{{theme}}/icons/ic_toggle-sidebar.svg" />
+		</div>
+
+		<!-- 設置按鈕 -->
+		<div class="ic-btn" ng-click="panel.openSettings()">
+			<img ng-src="/images/{{theme}}/icons/ic-tag-settings.svg" />
+		</div>
+	</div>
+
+	<div class="panel-container" ng-class="{'has-sidebar' : panel.isShowSidebar && listData.tagGroups.length > 0}">
+		<div class="panel-sidebar" allow-scroll>
+			<!-- 全部標籤群組 -->
+			<div class="panel-sidebar-item" ng-click="panel.selectGroup()" ng-class="{'active': !listData.sidebarGroup }">
+				<div class="icon"><div class="fake-svg png" style="-webkit-mask-image: url(/images/base/icons/ic-tag-all.png); -webkit-mask-size: 10px"></div></div>
+				<div class="name">{{'selectTagPanel.sidebar.all' | i18n}}</div>
+				<div class="right">
+					<div class="count" ng-if="listData.tagGroupsCountMap['all']">{{listData.tagGroupsCountMap['all']}}</div>
+				</div>
+			</div>
+			<!-- 單個標籤群組 -->
+			<div class="panel-sidebar-item color-{{group.color}}" ng-class="{'active': listData.sidebarGroup.id === group.id }" ng-repeat="group in listData.tagGroups" ng-click="panel.selectGroup(group)">
+				<div class="icon"><div class="fake-svg png"></div></div>
+				<div class="name">{{group.name}}</div>
+				<div class="right">
+					<div class="count">{{listData.tagGroupsCountMap[group.id]}}</div>
+				</div>
+			</div>
+			<!-- 未分類標籤群組 -->
+			<div class="panel-sidebar-item" ng-click="panel.selectGroup('none')" ng-class="{'active': listData.sidebarGroup.id === 'none' }">
+				<div class="icon"><div class="fake-svg png" style="-webkit-mask-image: url(/images/base/icons/ic-tag-unfiled.png); -webkit-mask-size: 10px"></div></div>
+				<div class="name">{{'selectTagPanel.sidebar.unfiled' | i18n}}</div>
+				<div class="right">
+					<div class="count" ng-if="listData.tagGroupsCountMap['none']">{{listData.tagGroupsCountMap['none']}}</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- 項目列表 -->
+		<div class="panel-list">
+			<!-- 空狀態（初始化時） -->
+			<div ng-if="panel.isInit && listData.items.length === 0 && listData.groups.length == 0" class="panel-empty">
+				<span>{{'selectTagPanel.empty.all' | i18n}}</span>
+			</div>
+
+			<select-panel-list
+				class="grid-container"
+				columns="{{panel.vsGridState.columns}}"
+				vs-grid-repeat="g in listData.groups"
+				vs-grid-repeat-options="panel.vsGridRepeatOptions"
+				vs-grid-items="panel.vsGridItems"
+				vs-grid-state="panel.vsGridState"
+				allow-scroll
+			>
+				<group>
+					<!-- 群組標籤 -->
+					<div class="group-label" ng-click="panel.toggleGroup(group.id)" ng-right-click="panel.toggleAllGroups(group.id)" ng-class="{'expand': !group.isCollapsed}">
+						<div class="name">{{group.name}} <span>({{group.items.length}})</span></div>
+						<div class="ic-btn expand" tippy tippy-placement="bottom" tippy-content="{{ 'selectTagPanel.expandLabel' | i18n }}<key>{{'general.r-click' | i18n}}</key>">
+							<img ng-src="/images/{{theme}}/icons/ic-inspector-expand.svg" />
+						</div>
+					</div>
+				</group>
+				<item>
+					<div
+						class="select-panel-item"
+						ng-class="{'active': item.id === listData.currentItem.id, 'checked': listData.selectedTags[item.name] }"
+						ng-click="panel.openItem($event, item)"
+						ng-mouseenter="panel.hoverItem($event, item)"
+						ng-switch
+						on="item.type"
+					>
+						<!-- 建立標籤 -->
+						<div ng-switch-when="create" class="list-item create color-{{listData.currentGroup.color}} create" style="height: 25px; line-height: 25px" ng-class="{'active': item.id == listData.currentItem.id}">
+							<div class="icon"><div class="fake-svg png"></div></div>
+							<div class="name">{{'selectTagPanel.newTagBtn' | i18n}} "<b>{{item.name}}</b>"</div>
+						</div>
+
+						<!-- 選擇標籤 -->
+						<div
+							ng-switch-default
+							class="list-item color-{{item.color}}"
+							style="height: 25px; line-height: 25px"
+							ng-class="{ 
+                                'active': item.id == listData.currentItem.id, 
+                                'selected': listData.selectedTags[item.name], 
+                                'search-mode': listData.currentTab === 'SELECTED' || listData.searchKeyword.length > 0, 
+                                'recent': item.isRecent, 
+                                'suggestion': item.isSuggestion && !item.isExist,
+                                'starred': item.isStarred
+                            }"
+						>
+							<div class="icon"><div class="fake-svg png"></div></div>
+							<div class="name" ng-bind-html="item.name | fuzzyMatch:listData.searchKeyword" title="{{::item.name}}"></div>
+							<div class="right">
+								<div class="count" ng-if="panel.isShowCount && item.imageCount"><span>(</span>{{::item.imageCount}}<span>)</span></div>
+							</div>
+						</div>
+					</div>
+				</item>
+			</select-panel-list>
+		</div>
+	</div>
+
+	<div class="panel-footer">
+		<div class="left">
+			<div class="shortcut-tip" ng-hide="selected.length === 0 || !panel.isShowSidebar">{{'selectTagPanel.shortcuts.switch' | i18n}}<key>Tab</key></div>
+			<div class="shortcut-tip">
+				{{'selectTagPanel.shortcuts.move' | i18n}}
+				<div class="keys"><key>↑</key><key>↓</key><key>←</key><key>→</key></div>
+			</div>
+			<div class="shortcut-tip">{{'selectTagPanel.shortcuts.select' | i18n}}<key>︎⏎</key></div>
+		</div>
+		<div class="right">
+			<div class="shortcut-tip">{{'selectTagPanel.shortcuts.close' | i18n}}<key>︎ESC</key></div>
+		</div>
+	</div>
+
+	<!-- 標籤設置面板 -->
+	<div class="setting-panel" ng-class="{'open': panel.isOpenSettings}" ng-mousedown="$event.stopPropagation();" ng-mouseup="$event.stopPropagation();">
+		<div class="setting-panel-container">
+			<!-- 布局設置 -->
+			<div class="panel-item" style="margin-top: 4px">
+				<div class="label">{{ 'selectTagPanel.settings.layout' | i18n }}</div>
+				<div class="value">
+					<div class="btn-group">
+						<div class="btn" ng-click="panel.setListMode(true)" ng-class="{'active': panel.vsGridRepeatOptions.listMode}"><img ng-src="/images/{{theme}}/icons/ic-layout-list.svg" /></div>
+						<div class="btn" ng-click="panel.setListMode(false)" ng-class="{'active': !panel.vsGridRepeatOptions.listMode}"><img ng-src="/images/{{theme}}/icons/ic-layout-grid.svg" /></div>
+					</div>
+				</div>
+			</div>
+			<!-- 列寬設置 -->
+			<div class="panel-item" style="margin-top: 4px" ng-show="!panel.vsGridRepeatOptions.listMode">
+				<div class="label">{{ 'selectTagPanel.settings.columnSize.label' | i18n }}</div>
+				<div class="value">
+					<div class="select select-xs" ng-click="$event.stopPropagation();">
+						<select tabindex="-1" ng-model="panel.columnSize" ng-change="panel.setColumnSize(panel.columnSize)">
+							<option value="large">{{ 'selectTagPanel.settings.columnSize.l' | i18n }}</option>
+							<option value="medium">{{ 'selectTagPanel.settings.columnSize.m' | i18n }}</option>
+							<option value="small">{{ 'selectTagPanel.settings.columnSize.s' | i18n }}</option>
+							<option value="xsmall">{{ 'selectTagPanel.settings.columnSize.xs' | i18n }}</option>
+						</select>
+						<div class="select-content">
+							<div class="select-value" ng-if="panel.columnSize == 'large'">{{ 'selectTagPanel.settings.columnSize.l' | i18n }}</div>
+							<div class="select-value" ng-if="panel.columnSize == 'medium'">{{ 'selectTagPanel.settings.columnSize.m' | i18n }}</div>
+							<div class="select-value" ng-if="panel.columnSize == 'small'">{{ 'selectTagPanel.settings.columnSize.s' | i18n }}</div>
+							<div class="select-value" ng-if="panel.columnSize == 'xsmall'">{{ 'selectTagPanel.settings.columnSize.xs' | i18n }}</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="separator"></div>
+
+			<!-- 顯示標籤設置 -->
+			<div class="panel-item" ng-click="panel.toggleStarredTags()">
+				<div class="label">{{ 'selectTagPanel.label.starred' | i18n }}</div>
+				<div class="value">
+					<label class="toggle" ng-click="$event.preventDefault()">
+						<input type="checkbox" ng-checked="panel.isShowStarredTags" />
+						<span class="slider"></span>
+					</label>
+				</div>
+			</div>
+
+			<div class="panel-item" ng-click="panel.toggleRecentTags()">
+				<div class="label">{{ 'selectTagPanel.label.recent' | i18n }}</div>
+				<div class="value">
+					<label class="toggle" ng-click="$event.preventDefault()">
+						<input type="checkbox" ng-checked="panel.isShowRecentTags" />
+						<span class="slider"></span>
+					</label>
+				</div>
+			</div>
+
+			<!-- <div class="panel-item" ng-click="panel.toggleSuggestedTags()">
+                <div class="label">{{ 'selectTagPanel.label.recommend' | i18n }}</div>
+                <div class="value">
+                    <label class="toggle" ng-click="$event.preventDefault()">
+                        <input type="checkbox" ng-checked="panel.isShowSuggestedTags">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div> -->
+
+			<div class="panel-item" ng-click="panel.toggleCount()">
+				<div class="label">{{ 'selectTagPanel.displayProperties.count' | i18n}}</div>
+				<div class="value">
+					<label class="toggle" ng-click="$event.preventDefault()">
+						<input type="checkbox" ng-checked="panel.isShowCount" />
+						<span class="slider"></span>
+					</label>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="setting-panel-overlay" ng-click="panel.closeSettings();"></div>
+</select-panel>
+<select-panel-overlay ng-click="panel.close()"></select-panel-overlay>

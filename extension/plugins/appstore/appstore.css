@@ -1,0 +1,4 @@
+.we-artwork::before,
+.we-artwork:not(.we-artwork--downloaded)::after {
+	content: none !important;
+}

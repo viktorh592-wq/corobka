@@ -1,0 +1,30 @@
+<div class="context-menu" ng-style="{'min-width': width == 'auto' ? 'auto' : width + 'px'}" ng-mouseup="focusSearchInput()">
+	<div class="search" ng-class="{'hide-search': !displayMenu.showSearch}">
+		<input type="search" ng-keydown="onSearchKeydown($event)" ng-keyup="onSearchKeyup($event)" ng-change="onSearchChange()" ng-model="searchKeyword" placeholder="{{ 'collect-window.context-menu.search' | i18n }}" />
+	</div>
+	<context-menu-items menu="displayMenu" active-menu="activeMenu" search-keyword="searchKeyword" theme="theme"> </context-menu-items>
+
+	<!-- 底部常駐按鈕 -->
+	<div class="persistent-items" ng-if="displayMenu.persistents">
+		<div class="context-menu-items">
+			<div class="context-menu-item-wrap" ng-repeat="item in displayMenu.persistents" ng-switch on="item.role">
+				<!-- 分割线 -->
+				<div ng-switch-when="separator" class="context-menu-separator"></div>
+
+				<!-- 一般状态 -->
+				<div ng-switch-default class="context-menu-item" ng-class="{'disabled': item.disabled, 'unchecked': item.checked === false }" ng-click="openItem(item)">
+					<div class="icon" ng-if="item.icon"><img ng-src="../..//images/{{theme}}/icons/context-menu/{{::item.icon}}" /></div>
+					<div class="label" ng-bind-html="item.label"></div>
+					<div class="right">
+						<div class="accelerator">{{::item.accelerator}}</div>
+						<div class="actions">
+							<div class="icon-checkbox"><img ng-src="../..//images/{{theme}}/icons/context-menu/ic-context-menu-checkbox.svg" /></div>
+							<!-- <div class="icon-arrow-right"><img ng-src="../..//images/{{theme}}/icons/context-menu/ic-context-menu-arrow-right.svg" /></div> -->
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="context-menu-overlay" ng-click="close()" ng-right-click="close()"></div>

@@ -1,0 +1,1 @@
+class Shortcuts{#onChangeCallback=[];async init(){this.#registerRuntimeChannel()}changed(e){this.#onChangeCallback.push(e)}#registerRuntimeChannel(){eagle.preference.changed(({dirty:e})=>{e.shortcut&&(Mousetrap.reset(),this.#onChangeCallback.forEach(e=>e()))})}}eagle.shortcuts=new Shortcuts;

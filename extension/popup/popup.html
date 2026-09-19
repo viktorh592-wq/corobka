@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html
+        ng-csp
+        ng-app="app"
+        ng-controller="PopupController"
+        eagle-extension
+        eagle-extension-theme="{{ $root.getTheme() }}"
+        eagle-extension-locale="{{ $root.preference.getPreferredLocale() }}"
+        eagle-browser="{{ $root.browserName }}"
+        eagle-extension-os="{{ $root.osName }}"
+>
+        <head>
+                <meta charset="utf-8" />
+                <title>Коробка</title>
+                <link rel="stylesheet" href="popup.css" />
+        </head>
+
+        <body class="has-url" ng-class="{ 'expand': showPreferences, 'save-board': $root.showSaveBoard }">
+                <div id="app" ng-if="$root.isI18nLoaded">
+                        <div>{{ message }}</div>
+                        <div id="not-open-app" class="message hide">
+                                <p>Картинки сохраняются прямо в приложение «Коробка» (в выбранную папку). Если приложение закрыто — файлы попадают в «Загрузки/Коробка» и будут добавлены при его запуске.</p>
+                        </div>
+                        <div id="settings-menu" class="settings-menu hide show-on-more" ng-controller="PreferenceController">
+                                <div class="settings-header">
+                                        <div id="back-container">
+                                                <div id="back" ng-click="$root.togglePreferences()">
+                                                        <div class="custom-icon" icon="close-btn"></div>
+                                                </div>
+                                        </div>
+                                        <div class="title">{{ 'settings.title' | i18n }}</div>
+                                </div>
+
+                                <div class="settings-content">
+                                        <div class="setting-section">
+                                                <div class="section-header">
+                                                        <div class="icon">
+                                                                <div class="custom-icon" icon="theme"></div>
+                                                        </div>
+                                                        <div class="name">{{ 'settings.theme-setting' | i18n }}</div>
+                                                </div>
+                                                <div class="section-panel">
+                                                        <div class="panel-row">
+                                                                <div class="options">
+                                                                        <div class="option theme-option" ng-class="{active: preference.theme == 'light'}" ng-click="setTheme('light')">
+                                                                                <div class="icon">
+                                                                                        <img src="images/light.png" alt="" />
+                                                                                </div>
+                                                                                <div class="name">{{ 'settings.theme-setting-light' | i18n }}</div>
+                                                                        </div>
+                                                                        <div class="option theme-option" ng-class="{active: preference.theme == 'dark'}" ng-click="setTheme('dark')">
+                                                                                <div class="icon">
+                                                                                        <img src="images/dark.png" alt="" />
+                                                                                </div>
+                                                                                <div class="name">{{ 'settings.theme-setting-dark' | i18n }}</div>
+                                                                        </div>
+                                                                        <div class="option theme-option" ng-class="{active: preference.theme == 'system'}" ng-click="setTheme('system')">
+                                                                                <div class="icon">
+                                                                                        <img src="images/system.png" alt="" />
+                                                                                </div>
+                                                                                <div class="name">{{ 'settings.theme-setting-system' | i18n }}</div>
+                                                                        </div>
+                                                                </div>
+                                                        </div>
+                                                        <div class="panel-row">
+                                                                {{ 'settings.language-setting' | i18n }}
+                                                                <div class="fake-select">
+                                                                        <span class="title" ng-if="preference.overrideLocale === 'browser'">{{ 'settings.language-setting-browser' | i18n }}</span>
+                                                                        <span class="title" ng-if="preference.overrideLocale !== 'browser'">{{ 'locale.name' | i18n }}</span>
+                                                                        <div class="arrow"></div>
+                                                                        <select id="locale" ng-model="preference.overrideLocale" ng-change="updateLocale()">
+                                                                                <option value="browser">{{ 'settings.language-setting-browser' | i18n }}</option>
+                                                                                <option ng-repeat="(localeKey, localeName) in locales" value="{{ localeKey }}">{{ localeName }}</option>
+                                                                        </select>
+                                                                </div>
+                                                        </div>
+                                                </div>
+                                        </div>
+
+                                        <div class="setting-section">
+                                                <div class="section-header">
+                                                        <div class="icon">
+                                                                <div class="custom-icon" icon="collect"></div>
+                                                        </div>
+                                                        <div class="name">{{ 'settings.collect-setting' | i18n }}</div>
+                                                </div>
+                                                <div class="section-panel">
+                                                        <div class="panel-row">
+                                                                <div class="options drag-options">
+                                                                        <div id="drag-cursor" class="option collection-option drag-feature" ng-class="{active: preference.dragMode == 1}" ng-click="setDragMode(1)">
+                                                                                <div class="icon">
+                                                                                        <div class="custom-icon" style="{{ $root.getIconVariable('popup.svg') }}"></div>
+                                                                                </div>
+                                                                                <div class="name">{{ 'settings.collect-setting-popup' | i18n }}</div>
+                                                                        </div>
+                                                                        <div id="drag-bottom" class="option collection-option drag-feature" ng-class="{active: preference.dragMode == 2}" ng-click="setDragMode(2)">
+                                                                                <div class="icon">
+                                                                                        <div class="custom-icon" style="{{ $root.getIconVariable('sticky-footer.svg') }}"></div>
+                                                                                </div>
+                                                                                <div class="name">{{ 'settings.collect-setting-bottom' | i18n }}</div>
+                                                                        </div>
+                                                                        <div id="drag-disable" class="option collection-option drag-feature" ng-class="{active: preference.dragMode == 0}" ng-click="setDragMode(0)">
+                                                                                <div class="icon">
+                                                                                        <div class="custom-icon" style="{{ $root.getIconVariable('disabled.svg') }}"></div>
+                                                                                </div>
+                                                                                <div class="name">{{ 'settings.collect-setting-disabled' | i18n }}</div>
+                                                                        </div>
+                                                                </div>
+                                                        </div>
+
+                                                        <div class="panel-row with-description">
+                                                                <div class="panel">
+                                                                        <label for="collect-support">{{ 'settings.using-collect' | i18n }}</label>
+                                                                        <label class="switch">
+                                                                                <input type="checkbox" ng-checked="preference.usingCollect" ng-click="toggleUsingCollect()" />
+                                                                                <span class="slider"></span>
+                                                                        </label>
+                                                                </div>
+                                                                <div class="description">{{ 'settings.using-collect-description' | i18n }}</div>
+                                                        </div>
+
+                                                        <div class="panel-row with-description">
+                                                                <div class="panel">
+                                                                        <label for="download-via-browser">{{ 'settings.download-via-browser' | i18n }}</label>
+                                                                        <label class="switch" ng-class="{ 'disabled': $root.env.isAppSupportDownloadViaBrowser === false }">
+                                                                                <input type="checkbox" ng-checked="preference.downloadViaBrowser && $root.env.isAppSupportDownloadViaBrowser" ng-click="toggleDownloadViaBrowser()" />
+                                                                                <span class="slider"></span>
+                                                                        </label>
+                                                                </div>
+                                                                <div class="description" ng-bind-html="'settings.download-via-browser-description' | i18n"></div>
+
+                                                                <div ng-if="$root.env.isAppSupportDownloadViaBrowser === false" class="alert">
+                                                                        <div class="warning" ng-bind-html="'settings.eagle-version-not-support-download-via-browser' | i18n"></div>
+                                                                </div>
+                                                        </div>
+                                                </div>
+                                        </div>
+
+                                        <div class="setting-section">
+                                                <div class="section-header">
+                                                        <div class="icon">
+                                                                <div class="custom-icon" icon="crop"></div>
+                                                        </div>
+                                                        <div class="name">{{ 'settings.screenshot-setting' | i18n }}</div>
+                                                </div>
+                                                <div class="section-panel">
+                                                        <div class="panel-row">
+                                                                <label for="collect-format">{{ 'settings.format-feature' | i18n }}</label>
+                                                                <div class="format-switch">
+                                                                        <div id="format-png" class="option format-feature" ng-class="{active: preference.captureFormat == 'png'}" ng-click="setCaptureFormat('png')">
+                                                                                <div class="icon"></div>
+                                                                                <div class="name">PNG</div>
+                                                                        </div>
+                                                                        <div id="format-jpeg" class="option format-feature" ng-class="{active: preference.captureFormat == 'jpeg'}" ng-click="setCaptureFormat('jpeg')">
+                                                                                <div class="icon"></div>
+                                                                                <div class="name">JPEG</div>
+                                                                        </div>
+                                                                </div>
+                                                        </div>
+                                                        <div class="panel-row">
+                                                                <label for="retina-support">{{ 'settings.using-retina' | i18n }}</label>
+                                                                <label class="switch">
+                                                                        <input type="checkbox" ng-checked="preference.useRetina" ng-click="toggleUseRetina()" />
+                                                                        <span class="slider"></span>
+                                                                </label>
+                                                        </div>
+
+                                                        <div class="panel-row">
+                                                                <label for="retina-support">{{ 'settings.scroll-delay' | i18n }}</label>
+                                                                <label for="capture-delay-checkbox flex-1">
+                                                                        <div style="display: inline-block; margin: 0 4px" class="input">
+                                                                                <input
+                                                                                        id="capture-delay"
+                                                                                        class="shortcut-input"
+                                                                                        type="number"
+                                                                                        step="0.1"
+                                                                                        min="{{ $root.env.isChrome ? 0.5: 0.3 }}"
+                                                                                        max="5"
+                                                                                        style="width: 60px"
+                                                                                        ng-model="preference.captureDelay"
+                                                                                        ng-change="setCaptureDelay(preference.captureDelay)"
+                                                                                />
+                                                                        </div>
+                                                                        <span id="capture-delay-sec">{{ 'settings.scroll-delay-sec' | i18n }}</span></label
+                                                                >
+                                                        </div>
+                                                </div>
+                                        </div>
+
+                                        <div class="setting-section">
+                                                <div class="section-header">
+                                                        <div class="icon">
+                                                                <div class="custom-icon" icon="shortcut"></div>
+                                                        </div>
+                                                        <div class="name">{{ 'settings.shortcuts' | i18n }}</div>
+                                                </div>
+                                                <div class="section-panel">
+                                                        <div class="shortcuts-table">
+                                                                <div class="panel-row shortcut">
+                                                                        <div class="name url">{{ 'dropdown.save-bookmark' | i18n }}</div>
+                                                                        <div class="input">
+                                                                                <input id="url-save-shortcut" class="shortcut-input" type="text" placeholder="{{ 'settings.shortcuts-placeholder' | i18n }}" ng-model="preference.keybindings['url-save']" shortcut-input />
+                                                                        </div>
+                                                                </div>
+                                                                <div class="panel-row shortcut">
+                                                                        <div class="name batch">{{ 'dropdown.save-images' | i18n }}</div>
+                                                                        <div class="input">
+                                                                                <input id="batch-save-shortcut" class="shortcut-input" type="text" placeholder="{{ 'settings.shortcuts-placeholder' | i18n }}" ng-model="preference.keybindings['batch-save']" shortcut-input />
+                                                                        </div>
+                                                                </div>
+                                                                <div class="panel-row shortcut">
+                                                                        <div class="name selected">{{ 'dropdown.capture-selected' | i18n }}</div>
+                                                                        <div class="input">
+                                                                                <input id="capture-area-shortcut" class="shortcut-input" type="text" placeholder="{{ 'settings.shortcuts-placeholder' | i18n }}" ng-model="preference.keybindings['capture-area']" shortcut-input />
+                                                                        </div>
+                                                                </div>
+                                                                <div class="panel-row shortcut">
+                                                                        <div class="name visible">{{ 'dropdown.capture-visible' | i18n }}</div>
+                                                                        <div class="input">
+                                                                                <input
+                                                                                        id="capture-visible-shortcut"
+                                                                                        class="shortcut-input"
+                                                                                        type="text"
+                                                                                        placeholder="{{ 'settings.shortcuts-placeholder' | i18n }}"
+                                                                                        ng-model="preference.keybindings['capture-visible']"
+                                                                                        shortcut-input
+                                                                                />
+                                                                        </div>
+                                                                </div>
+                                                                <div class="panel-row shortcut">
+                                                                        <div class="name entire">{{ 'dropdown.capture-entire' | i18n }}</div>
+                                                                        <div class="input">
+                                                                                <input id="capture-entire-shortcut" class="shortcut-input" type="text" placeholder="{{ 'settings.shortcuts-placeholder' | i18n }}" ng-model="preference.keybindings['capture-entire']" shortcut-input />
+                                                                        </div>
+                                                                </div>
+                                                        </div>
+                                                </div>
+                                        </div>
+
+                                        <div class="setting-section" ng-if="$root.isNewVersionOfEagle">
+                                                <div class="section-header">
+                                                        <div class="icon">
+                                                                <div class="custom-icon" icon="developer"></div>
+                                                        </div>
+                                                        <div class="name">{{ 'settings.custom-collect.title' | i18n }}</div>
+                                                </div>
+                                                <div class="section-description">{{ 'settings.custom-collect.description' | i18n }}</div>
+                                                <a href="https://github.com/eagle-app/eagle-attributes" class="download-btn" target="_blank">
+                                                        <span class="name">{{ 'settings.custom-collect.open-document' | i18n }}</span>
+                                                </a>
+                                        </div>
+
+                                        <div class="setting-section">
+                                                <div class="section-header">
+                                                        <div class="icon">
+                                                                <div class="custom-icon" icon="support"></div>
+                                                        </div>
+                                                        <div class="name">{{ 'settings.support-and-others' | i18n }}</div>
+                                                </div>
+                                                <button class="download-btn" type="button" ng-click="downloadLogClicked()">
+                                                        <div class="custom-icon" icon="bug"></div>
+                                                        <span class="name">{{ 'settings.download-debug-report' | i18n }}</span>
+                                                </button>
+                                        </div>
+                                </div>
+                        </div>
+
+                        <div id="dropdown-menu" class="dropdown-menu hide-on-more" ng-controller="ActionController">
+                                <div id="save-board" class="save-board menu-item hide-on-more" show-save-board ng-click="saveBoardClicked()" ng-if="showSaveBoard">
+                                        <div class="icon">
+                                                <div class="custom-icon" icon="save-board"></div>
+                                        </div>
+                                        <div class="name">{{ 'dropdown.save-board' | i18n }}</div>
+                                        <!-- <img src="images/ic_new.svg" /> -->
+                                </div>
+                                <div id="save-url" class="save-url-btn menu-item hide-on-more" ng-click="saveUrlClicked()">
+                                        <div class="icon">
+                                                <div class="custom-icon" icon="save-url"></div>
+                                        </div>
+                                        <div class="name">{{ 'dropdown.save-url' | i18n }}</div>
+                                        <div class="shortcut" ng-bind-html="preference.keybindings['url-save'] | shortcut"></div>
+                                </div>
+                                <div id="save-images" class="menu-item hide-on-more" ng-click="saveImagesClicked()">
+                                        <div class="icon">
+                                                <div class="custom-icon" icon="save-images"></div>
+                                        </div>
+                                        <div class="name">{{ 'dropdown.save-images' | i18n }}</div>
+                                        <div class="shortcut" ng-bind-html="preference.keybindings['batch-save'] | shortcut"></div>
+                                </div>
+                                <hr />
+                                <div id="capture-crop" class="menu-item" ng-click="captureCropClicked()">
+                                        <div class="icon">
+                                                <div class="custom-icon" icon="capture-crop"></div>
+                                        </div>
+                                        <div class="name">{{ 'dropdown.capture-selected' | i18n }}</div>
+                                        <div class="shortcut" ng-bind-html="preference.keybindings['capture-area'] | shortcut"></div>
+                                </div>
+                                <div id="capture-visible" class="menu-item" ng-click="captureVisibleClicked()">
+                                        <div class="icon">
+                                                <div class="custom-icon" icon="capture-visible"></div>
+                                        </div>
+                                        <div class="name">{{ 'dropdown.capture-visible' | i18n }}</div>
+                                        <div class="shortcut" ng-bind-html="preference.keybindings['capture-visible'] | shortcut"></div>
+                                </div>
+                                <div id="capture-entire" class="menu-item" ng-click="captureEntireClicked()">
+                                        <div class="icon">
+                                                <div class="custom-icon" icon="capture-page"></div>
+                                        </div>
+                                        <div class="name">{{ 'dropdown.capture-entire' | i18n }}</div>
+                                        <div class="shortcut" ng-bind-html="preference.keybindings['capture-entire'] | shortcut"></div>
+                                </div>
+                                <hr />
+                                <div id="disable-drag-url" class="menu-item no-hover">
+                                        <div class="icon">
+                                                <div class="custom-icon" icon="drag"></div>
+                                        </div>
+                                        <div class="name">{{ 'dropdown.drag-feature' | i18n }}</div>
+                                        <div class="fake-select">
+                                                <span class="title">{{ disabledOptionTitleKey | i18n }}</span>
+                                                <div class="arrow"></div>
+                                                <!-- 當網址網域都有的時候優先秀網域 -->
+                                                <select ng-model="disabledOption" ng-change="updateDisabledOption(disabledOption)">
+                                                        <option value="0">{{ 'dropdown.enable' | i18n }}</option>
+                                                        <option value="1">{{ 'dropdown.disable-url' | i18n }}</option>
+                                                        <option value="2">{{ 'dropdown.disable-domain' | i18n }}</option>
+                                                </select>
+                                        </div>
+
+                                        <div class="shortcut"></div>
+                                </div>
+                                <hr />
+                                <div id="preferences" class="menu-item" ng-click="$root.togglePreferences()">
+                                        <div class="icon">
+                                                <div class="custom-icon" icon="preferences"></div>
+                                        </div>
+                                        <div class="name">{{ 'settings.title' | i18n }}</div>
+                                        <div class="icon" style="margin-right: 0px">
+                                                <div class="custom-icon" icon="arrow-right"></div>
+                                        </div>
+                                </div>
+                                <input id="shortcut-input" type="text" autofocus="" style="position: absolute; top: 0; opacity: 0; height: 0" />
+                        </div>
+                </div>
+
+                <!-- Eagle 核心 -->
+                <script src="/js/lib/api/eagle.js"></script>
+                <script src="/js/lib/api/crypto.js"></script>
+                <script src="/js/lib/api/env.js"></script>
+                <script src="/js/lib/api/runtime.js"></script>
+                <script src="/js/lib/api/extension.js"></script>
+                <script src="/js/lib/api/queue.js"></script>
+                <script src="/js/lib/board-saver.js"></script>
+                <script src="/js/lib/api/storage.js"></script>
+                <script src="/js/lib/api/tabs.js"></script>
+                <script src="/js/lib/api/preference.js"></script>
+                <script src="/js/lib/api/fetch.js"></script>
+                <script src="/js/lib/api/logger.js"></script>
+                <script src="/js/lib/api/i18n.js"></script>
+
+                <!-- 外部套件 -->
+                <script src="/js/vendors/jquery.min.js"></script>
+                <script src="/js/vendors/angular.min.js"></script>
+
+                <!-- 共用元件 -->
+                <script src="/js/modules/i18n.js"></script>
+                <script src="/js/modules/shortcut.js"></script>
+
+                <!-- 主程式 -->
+                <script src="js/controllers/popup.js"></script>
+                <script src="js/controllers/action.js"></script>
+                <script src="js/controllers/preference.js"></script>
+                <script src="js/directives/shortcut-input.js"></script>
+        </body>
+</html>

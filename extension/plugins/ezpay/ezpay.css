@@ -1,0 +1,12 @@
+#head_bg,
+footer {
+	display: none !important;
+}
+
+body {
+	display: none !important;
+}
+
+body.show #merinfo_logo {
+	display: block !important;
+}

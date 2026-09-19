@@ -1,0 +1,1 @@
+angular.module("tippy",[]).directive("tippy",["$timeout","$rootScope",(t,n)=>({restrict:"A",link:function(t,n,e,i){let o=null;function p(){o&&o.destroy(),o=tippy(n[0],{animation:"scale",arrow:!1,content:e.tippyContent||"",placement:e.tippyPlacement||"right",allowHTML:!0})}p(),e.$observe("tippyContent",function(t){p()})}})]);

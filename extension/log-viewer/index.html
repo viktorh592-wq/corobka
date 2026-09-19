@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>Eagle Extension Log</title>
+		<link rel="stylesheet" href="app.css" />
+	</head>
+
+	<body>
+		<div class="container">
+			<div id="main" style="display: none">
+				<header class="row">
+					<h1><img src="/icons/icon.png" alt="" srcset="" width="22" /> Extension Log Viewer</h1>
+					<button id="download">Download Logs</button>
+				</header>
+
+				<div id="board" class="board">
+					<div id="logs"></div>
+				</div>
+
+				<div class="row">
+					<label style="font-weight: bold"> <input type="checkbox" id="autoscroll" checked /> Auto Scroll</label>
+				</div>
+			</div>
+			<div id="exportLogMessage" style="display: none">
+				<h2>Exporting log files in progress</h2>
+				<p style="display: none">this page will be closed automatically in 5 seconds</p>
+			</div>
+		</div>
+
+		<!-- vendors -->
+		<script src="/js/vendors/jquery.min.js"></script>
+		<script src="/js/vendors/fflate.min.js"></script>
+		<script src="/js/vendors/logline.js"></script>
+
+		<!-- library -->
+		<script src="/js/lib/api/eagle.js"></script>
+		<script src="/js/lib/api/storage.js"></script>
+		<script src="/js/lib/api/crypto.js"></script>
+		<script src="/js/lib/api/env.js"></script>
+		<script src="/js/lib/api/runtime.js"></script>
+		<script src="/js/lib/api/extension.js"></script>
+		<script src="/js/lib/api/preference.js"></script>
+		<script src="/js/lib/api/i18n.js"></script>
+		<script src="/js/lib/api/logger.js"></script>
+
+		<!-- main entry -->
+		<script src="app.js"></script>
+	</body>
+</html>

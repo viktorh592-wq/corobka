@@ -1,0 +1,9 @@
+body.eagle-capturing .InfinityFooter-footerInfinity-2xv,
+html.eagle-capturing .InfinityFooter-footerInfinity-2xv {
+	display: none !important;
+}
+
+.project-modules img,
+.grid__item-image {
+	pointer-events: initial !important;
+}
