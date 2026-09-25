@@ -25,7 +25,10 @@ class PaletteService {
 
       final generator = await PaletteGenerator.fromImage(
         image,
-        maximumColorCount: 5,
+        // 10 — чтобы покрыть все «основные» цвета картинки: ранее при 5
+        // часть заметных цветов не попадала в палитру, и пользователь не
+        // мог скопировать нужный HEX. См. обсуждение в настройках палитры.
+        maximumColorCount: 10,
       );
 
       image.dispose();

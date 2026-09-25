@@ -7,6 +7,7 @@ import '../data/settings_repository.dart';
 import '../features/collection/collection_state.dart';
 import '../features/logging/log_service.dart';
 import '../features/settings/theme_provider.dart';
+import '../theme/app_theme.dart';
 import '../widgets/app_dialog.dart';
 import '../widgets/content_area.dart';
 import '../widgets/left_panel.dart';
@@ -191,6 +192,11 @@ class _MainScreenState extends State<MainScreen> {
             const SizedBox(height: 16),
             const Divider(height: 1),
             const SizedBox(height: 12),
+            // ── Оформление интерфейса ──
+            const _DesignSystemSection(),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
             // ── Журнал (лог) приложения и плагина ──
             _LogSection(messenger: ScaffoldMessenger.of(dialogContext)),
           ],
@@ -216,6 +222,90 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Секция выбора дизайн-системы интерфейса в настройках.
+///
+/// Три варианта (Material / iOS Frosted / iOS Transparent) плюс переключатель
+/// светлой/тёмной темы. Выбор применяется немедленно — [ThemeProvider]
+/// перестраивает корневой [MaterialApp].
+class _DesignSystemSection extends StatelessWidget {
+  const _DesignSystemSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.watch<ThemeProvider>();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Оформление интерфейса',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Дизайн-система интерфейса. Material — классический M3-стиль, '
+          'iOS Frosted — матовое стекло с размытием, iOS Transparent — '
+          'полупрозрачные панели без размытия.',
+        ),
+        const SizedBox(height: 8),
+        // Сегментный контрол дизайн-системы (3 варианта).
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            for (final design in AppDesignSystem.values)
+              ChoiceChip(
+                label: Text(_designLabel(design)),
+                selected: theme.design == design,
+                onSelected: (_) => theme.setDesign(design),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        // Переключатель яркости (светлая/тёмная/системная).
+        Text(
+          'Яркость темы',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            ChoiceChip(
+              label: const Text('Светлая'),
+              selected: theme.mode == AppThemeMode.light,
+              onSelected: (_) => theme.setMode(AppThemeMode.light),
+            ),
+            ChoiceChip(
+              label: const Text('Тёмная'),
+              selected: theme.mode == AppThemeMode.dark,
+              onSelected: (_) => theme.setMode(AppThemeMode.dark),
+            ),
+            ChoiceChip(
+              label: const Text('Системная'),
+              selected: theme.mode == AppThemeMode.system,
+              onSelected: (_) => theme.setMode(AppThemeMode.system),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Человекочитаемое название дизайн-системы.
+  String _designLabel(AppDesignSystem design) {
+    switch (design) {
+      case AppDesignSystem.material:
+        return 'Material Design';
+      case AppDesignSystem.iosFrosted:
+        return 'iOS · матовое стекло';
+      case AppDesignSystem.iosTransparent:
+        return 'iOS · прозрачная';
+    }
   }
 }
 

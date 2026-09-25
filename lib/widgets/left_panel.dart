@@ -66,7 +66,7 @@ class _LeftPanelState extends State<LeftPanel> {
         .where((f) => filter == null || filter.visibleIds.contains(f.id))
         .toList();
 
-    return Material(
+    return FrostedPanel(
       color: colors.panel,
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),

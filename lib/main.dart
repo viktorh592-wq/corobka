@@ -49,10 +49,13 @@ class _AppView extends StatefulWidget {
   State<_AppView> createState() => _AppViewState();
 }
 
-class _AppViewState extends State<_AppView> {
+class _AppViewState extends State<_AppView> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    // Подписываемся на смену системной темы — чтобы в режиме `system`
+    // интерфейс перестраивался при переключении тёмной/светлой темы ОС.
+    WidgetsBinding.instance.addObserver(this);
     // Инициализируем коллекцию и загружаем настройки после первого рендера,
     // чтобы не блокировать построение виджет-дерева.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -75,32 +78,42 @@ class _AppViewState extends State<_AppView> {
         debugPrint('HotFolderService start skipped: $e');
         LogService.instance.add('ERROR', 'Ошибка старта сервисов: $e');
       }
-      themeProvider.load();
+      // load() — после первого await; внутри есть notifyListeners(),
+      // который перестроит MaterialApp с актуальной темой и дизайн-системой.
+      await themeProvider.load();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    // В режиме `system` — заставляем MaterialApp перестроиться, чтобы
+    // themeFor(platformBrightness) вернул уже новый ThemeData.
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
+    final platformBrightness =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    final resolvedTheme = theme.themeFor(platformBrightness);
 
     return MaterialApp(
       title: 'коробка',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: _resolveThemeMode(theme.mode),
-      home: const MainScreen(),
+      // Для iOS-тем мы строим единую тему под текущую яркость системы —
+      // Material Design `themeMode` больше не используется напрямую.
+      // Свет/тьма выбирается в ThemeProvider.themeFor().
+      theme: resolvedTheme,
+      darkTheme: resolvedTheme,
+      themeMode: ThemeMode.light,
+      home: const FrostedScaffoldBackground(child: MainScreen()),
     );
-  }
-
-  ThemeMode _resolveThemeMode(AppThemeMode mode) {
-    switch (mode) {
-      case AppThemeMode.light:
-        return ThemeMode.light;
-      case AppThemeMode.dark:
-        return ThemeMode.dark;
-      case AppThemeMode.system:
-        return ThemeMode.system;
-    }
   }
 }

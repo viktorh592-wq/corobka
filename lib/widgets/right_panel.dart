@@ -25,7 +25,7 @@ class RightPanel extends StatelessWidget {
     final state = context.watch<CollectionState>();
     final item = state.selectedItem;
 
-    return Material(
+    return FrostedPanel(
       color: colors.panel,
       child: item == null
           ? const _EmptyDetails()
@@ -401,6 +401,17 @@ class _PaletteBlockState extends State<_PaletteBlock> {
     );
   }
 
+  /// Клик по свотчу: выбирает цвет И сразу копирует его HEX в буфер обмена.
+  /// Поведение — как в Eagle/Figma: один клик = цвет в буфере.
+  Future<void> _onSwatchTap(int i) async {
+    setState(() {
+      _selectedIndex = _selectedIndex == i ? null : i;
+    });
+    // Если клик «снял» выделение — не копируем (пользователь закрыл цвет).
+    if (_selectedIndex == null) return;
+    await _copyHex();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_colors.isEmpty) return const SizedBox.shrink();
@@ -410,16 +421,18 @@ class _PaletteBlockState extends State<_PaletteBlock> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // Wrap, а не Row: при 10 цветах старый Row переполнял панель
+          // и часть квадратиков обрезалась. Wrap переносит на новую строку.
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
               for (var i = 0; i < _colors.length; i++)
                 _ColorSwatch(
                   color: _colors[i],
                   selected: _selectedIndex == i,
                   hex: _hexOf(_colors[i]),
-                  onTap: () => setState(() {
-                    _selectedIndex = _selectedIndex == i ? null : i;
-                  }),
+                  onTap: () => _onSwatchTap(i),
                 ),
             ],
           ),

@@ -12,6 +12,7 @@ class SettingsRepository {
   static const _kThumbnailExtent = 'thumbnail_extent';
   static const _kLeftPanelWidth = 'left_panel_width';
   static const _kRightPanelWidth = 'right_panel_width';
+  static const _kDesignSystem = 'design_system';
 
   /// Сохранение режима темы.
   Future<void> saveThemeMode(String mode) async {
@@ -23,6 +24,19 @@ class SettingsRepository {
   Future<String?> loadThemeMode() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_kThemeMode);
+  }
+
+  /// Сохранение выбранной дизайн-системы интерфейса
+  /// (material / iosFrosted / iosTransparent).
+  Future<void> saveDesignSystem(String design) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kDesignSystem, design);
+  }
+
+  /// Чтение сохранённой дизайн-системы. `null`, если не задана.
+  Future<String?> loadDesignSystem() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kDesignSystem);
   }
 
   /// Сохранение режима просмотра.
