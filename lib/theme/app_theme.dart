@@ -106,7 +106,9 @@ class AppTheme {
           panel: panelColor,
           contentBackground: contentBackground,
         ),
-        _DesignSystemExtension(design: AppDesignSystem.material),
+        const _DesignSystemExtension(
+          design: AppDesignSystem.material,
+        ),
       ],
     );
   }
@@ -257,9 +259,10 @@ class AppTheme {
           fontFamilyFallback: const ['Inter', 'Roboto', 'Segoe UI'],
         ),
       ),
-      // Бóльшие скругления, как в iOS. CardTheme (а не CardThemeData)
-      // для совместимости со старыми Flutter 3.x.
-      cardTheme: const CardTheme(
+      // Бóльшие скругления, как в iOS. CardThemeData — это новое имя
+      // в Flutter 3.22+ (старое CardTheme теперь deprecated и не принимается
+      // как аргумент ThemeData.cardTheme начиная с 3.47).
+      cardTheme: const CardThemeData(
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
@@ -273,9 +276,8 @@ class AppTheme {
         ),
       ),
       // Полупрозрачный фон у диалогов — фоновый градиент слегка
-      // просвечивает, сохраняя «воздушный» iOS-look. DialogTheme (а не
-      // DialogThemeData) — для совместимости со старыми Flutter 3.x.
-      dialogTheme: DialogTheme(
+      // просвечивает, сохраняя «воздушный» iOS-look.
+      dialogTheme: DialogThemeData(
         backgroundColor: brightness == Brightness.light
             ? const Color(0xF2FFFFFF)
             : const Color(0xF21C1C1E),
