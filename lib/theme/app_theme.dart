@@ -286,6 +286,54 @@ class AppTheme {
           borderRadius: BorderRadius.all(Radius.circular(18)),
         ),
       ),
+      // Контекстные меню (PopupMenu) — тоже полупрозрачные, чтобы
+      // фоновый градиент просвечивал и был эффект стекла.
+      popupMenuTheme: PopupMenuThemeData(
+        color: brightness == Brightness.light
+            ? const Color(0xF2FFFFFF)
+            : const Color(0xF21C1C1E),
+        elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+      ),
+      // SnackBar — полупрозрачный «плавающий», как в iOS.
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: brightness == Brightness.light
+            ? const Color(0xF2FFFFFF)
+            : const Color(0xF21C1C1E),
+        elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+      ),
+      // Bottom sheet (если где-то появится) — тоже стекло.
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: brightness == Brightness.light
+            ? const Color(0xF2FFFFFF)
+            : const Color(0xF21C1C1E),
+        elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(18),
+            topRight: Radius.circular(18),
+          ),
+        ),
+      ),
+      // Кнопки с заливкой (FilledButton) — чуть прозрачнее, чтобы
+      // сохранялся «воздушный» стиль.
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: scheme.primary.withValues(alpha: 0.85),
+          foregroundColor: scheme.onPrimary,
+        ),
+      ),
+      // Карточки: прозрачный фон + мягкая граница, чтобы стекло читалось
+      // даже если внутри карточки лежит opaque-виджет.
+      cardColor: brightness == Brightness.light
+          ? const Color(0xB3FFFFFF)
+          : const Color(0xB31C1C1E),
       extensions: [
         PanelColors(
           panel: panelColor,

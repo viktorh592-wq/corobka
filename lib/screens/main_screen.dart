@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -118,21 +120,7 @@ class _MainScreenState extends State<MainScreen> {
       child: Focus(
         autofocus: true,
         child: Scaffold(
-          appBar: AppBar(
-            title: const Text('коробка'),
-            actions: [
-              IconButton(
-                tooltip: 'Настройки',
-                icon: const Icon(Icons.settings_outlined),
-                onPressed: () => _openSettings(context),
-              ),
-              IconButton(
-                tooltip: 'Переключить тему (T)',
-                icon: const Icon(Icons.dark_mode_outlined),
-                onPressed: () => _toggleTheme(context),
-              ),
-            ],
-          ),
+          appBar: _buildAppBar(context),
           body: Row(
             children: [
               SizedBox(width: _leftWidth, child: const LeftPanel()),
@@ -149,6 +137,55 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// AppBar с эффектом стекла в iOS-темах.
+  ///
+  /// В Material — обычный opaque AppBar (через AppBarTheme).
+  /// В iOS Frosted — transparent фон + BackdropFilter σ=30.
+  /// В iOS Transparent — transparent фон + полупрозрачный цвет панели.
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    final isGlass = context.designSystem != AppDesignSystem.material;
+    final blurOn = context.backdropBlurEnabled && context.backdropBlurSigma > 0;
+
+    Widget? flexibleSpace;
+    Color? backgroundColor;
+
+    if (isGlass) {
+      // В iOS-темах AppBar сам по себе прозрачный, а стекло рендерит
+      // flexibleSpace через BackdropFilter.
+      backgroundColor = Colors.transparent;
+      if (blurOn) {
+        flexibleSpace = BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: context.backdropBlurSigma,
+            sigmaY: context.backdropBlurSigma,
+            tileMode: TileMode.mirror,
+          ),
+          child: ColoredBox(color: context.panelColors.panel),
+        );
+      } else {
+        flexibleSpace = ColoredBox(color: context.panelColors.panel);
+      }
+    }
+
+    return AppBar(
+      title: const Text('коробка'),
+      backgroundColor: backgroundColor,
+      flexibleSpace: flexibleSpace,
+      actions: [
+        IconButton(
+          tooltip: 'Настройки',
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: () => _openSettings(context),
+        ),
+        IconButton(
+          tooltip: 'Переключить тему (T)',
+          icon: const Icon(Icons.dark_mode_outlined),
+          onPressed: () => _toggleTheme(context),
+        ),
+      ],
     );
   }
 
@@ -194,6 +231,14 @@ class _MainScreenState extends State<MainScreen> {
             const SizedBox(height: 12),
             // ── Оформление интерфейса ──
             const _DesignSystemSection(),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            // ── Палитра цветов ──
+            _PaletteRegenSection(
+              state: state,
+              messenger: ScaffoldMessenger.of(dialogContext),
+            ),
             const SizedBox(height: 12),
             const Divider(height: 1),
             const SizedBox(height: 12),
@@ -306,6 +351,107 @@ class _DesignSystemSection extends StatelessWidget {
       case AppDesignSystem.iosTransparent:
         return 'iOS · прозрачная';
     }
+  }
+}
+
+/// Секция массового пересчёта цветовой палитры в настройках.
+///
+/// После увеличения `maximumColorCount` (5 → 10) в [PaletteService] старые
+/// изображения в коллекции всё ещё хранят палитру из 5 цветов. Эта секция
+/// позволяет пересчитать палитру разом для всех существующих картинок.
+class _PaletteRegenSection extends StatefulWidget {
+  const _PaletteRegenSection({required this.state, required this.messenger});
+
+  final CollectionState state;
+  final ScaffoldMessengerState messenger;
+
+  @override
+  State<_PaletteRegenSection> createState() => _PaletteRegenSectionState();
+}
+
+class _PaletteRegenSectionState extends State<_PaletteRegenSection> {
+  bool _running = false;
+  int _done = 0;
+  int _total = 0;
+
+  Future<void> _run() async {
+    setState(() {
+      _running = true;
+      _done = 0;
+      _total = 0;
+    });
+    try {
+      final count = await widget.state.regenerateAllPalettes(
+        onProgress: (done, total) {
+          if (!mounted) return;
+          setState(() {
+            _done = done;
+            _total = total;
+          });
+        },
+      );
+      if (!mounted) return;
+      widget.messenger.showSnackBar(
+        SnackBar(content: Text('Палитра обновлена для $count изображений')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      widget.messenger.showSnackBar(
+        SnackBar(content: Text('Ошибка: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Цветовая палитра',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Палитра извлекается при импорте. После обновления числа цветов '
+          '(теперь их 10 вместо 5) старые изображения хранят устаревшую '
+          'палитру — пересчитайте, чтобы получить все 10 цветов.',
+        ),
+        const SizedBox(height: 8),
+        if (_running && _total > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LinearProgressIndicator(
+                  value: _done / _total,
+                  minHeight: 4,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$_done / $_total',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            FilledButton.tonalIcon(
+              icon: const Icon(Icons.palette_outlined, size: 16),
+              label: const Text('Пересчитать для всех'),
+              onPressed: _running ? null : _run,
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }
 

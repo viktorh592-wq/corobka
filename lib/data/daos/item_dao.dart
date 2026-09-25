@@ -158,6 +158,31 @@ class ItemDao {
     );
   }
 
+  /// Обновление цветовой палитры элемента (JSON-строка `["RRGGBB", ...]`).
+  ///
+  /// Используется при пересчёте палитры после изменения числа цветов
+  /// (раньше было 5, стало 10 — старые записи хранят устаревшую палитру).
+  Future<int> updatePalette(int id, String? palette) async {
+    final db = await _db;
+    return db.update(
+      'items',
+      {'palette': palette},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Все элементы коллекции (без корзины) — для массового пересчёта
+  /// палитры.
+  Future<List<CollectionItem>> allActiveItems() async {
+    final db = await _db;
+    final rows = await db.query(
+      'items',
+      where: 'deleted_at IS NULL',
+    );
+    return rows.map(CollectionItem.fromMap).toList();
+  }
+
   /// Группы дубликатов: элементы с одинаковым хэшем содержимого.
   /// Возвращает список групп (в группе минимум 2 элемента).
   Future<List<List<CollectionItem>>> getDuplicateGroups() async {

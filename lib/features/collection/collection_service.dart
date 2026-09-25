@@ -282,6 +282,44 @@ class CollectionService {
   Future<int> moveItemToFolder(int id, int? folderId) =>
       _itemDao.moveToFolder(id, folderId);
 
+  /// Пересчёт цветовой палитры для одного элемента.
+  ///
+  /// Используется после увеличения `maximumColorCount` в [PaletteService]:
+  /// старые записи в БД хранят палитру из 5 цветов и не обновятся
+  /// автоматически — нужно явное пересчитывание.
+  Future<String?> regeneratePalette(CollectionItem item) async {
+    if (item.isVideo || item.isAudio) return null;
+    final palette = await _paletteService.extractPalette(item.path);
+    if (palette != null) {
+      await _itemDao.updatePalette(item.id, palette);
+    }
+    return palette;
+  }
+
+  /// Массовый пересчёт палитры для всех изображений коллекции.
+  ///
+  /// Возвращает количество обработанных элементов. [onProgress] вызывается
+  /// после каждого элемента с индексом и общим числом — для прогресс-бара.
+  Future<int> regenerateAllPalettes({
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final items = await _itemDao.allActiveItems();
+    final images =
+        items.where((e) => !e.isVideo && !e.isAudio).toList();
+    var done = 0;
+    for (final item in images) {
+      try {
+        await regeneratePalette(item);
+      } catch (e) {
+        // Не валим весь процесс из-за одной битой картинки.
+        debugPrint('Palette regen failed for ${item.path}: $e');
+      }
+      done++;
+      onProgress?.call(done, images.length);
+    }
+    return done;
+  }
+
   // ─────────── ТЕГИ ───────────
 
   Future<List<Tag>> getTags() => _tagDao.getAll();

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../data/models/item.dart';
 import '../features/collection/collection_state.dart';
+import '../theme/app_theme.dart';
 import 'app_dialog.dart';
 import 'color_sliders.dart';
 import 'duplicates_dialog.dart';
@@ -193,28 +194,32 @@ class _ToolbarState extends State<_Toolbar> {
     final state = widget.state;
     final isTrash = state.isTrashView;
 
-    return Material(
-      elevation: 1,
-      // Горизонтальный скролл: при узком окне (или широких боковых панелях)
-      // тулбар не переполняется, а прокручивается. IntrinsicWidth даёт Row
-      // фиксированную ширину (Spacer/Expanded остаются корректными), а при
-      // нехватке места содержимое прокручивается.
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-              child: IntrinsicWidth(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      // Поле поиска: закруглённое как кнопки (radius 20 —
-                      // такой же, как у FilledButton/OutlinedButton в M3),
+    // FrostedPanel в iOS-темах даёт эффект стекла (blur + полупрозрачный
+    // фон). В Material — обычный Material widget без изменений.
+    return FrostedPanel(
+      child: Material(
+        type: MaterialType.transparency,
+        elevation: 0,
+        // Горизонтальный скролл: при узком окне (или широких боковых панелях)
+        // тулбар не переполняется, а прокручивается. IntrinsicWidth даёт Row
+        // фиксированную ширину (Spacer/Expanded остаются корректными), а при
+        // нехватке места содержимое прокручивается.
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                child: IntrinsicWidth(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        // Поле поиска: закруглённое как кнопки (radius 20 —
+                        // такой же, как у FilledButton/OutlinedButton в M3),
                       // длина увеличена на 40% (200 → 280).
                       SizedBox(
                         width: 280,
@@ -369,8 +374,9 @@ class _ToolbarState extends State<_Toolbar> {
             ),
           );
         },
-      ),
-    );
+      ), // LayoutBuilder (child of Material)
+      ), // Material (child of FrostedPanel)
+    ); // FrostedPanel — return statement
   }
 
   /// Диалог поиска дубликатов (по одинаковому содержимому файлов).

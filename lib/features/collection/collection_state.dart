@@ -475,6 +475,46 @@ class CollectionState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Пересчёт палитры для выбранного элемента и обновление UI.
+  ///
+  /// Полезно после увеличения числа цветов в [PaletteService] — у старых
+  /// картинок палитра хранит меньше цветов, чем сейчас извлекает сервис.
+  Future<void> regenerateSelectedPalette() async {
+    final item = _selectedItem;
+    if (item == null) return;
+    final palette = await _service.regeneratePalette(item);
+    // Обновляем копию выбранного элемента в состоянии, чтобы правая
+    // панель сразу перерисовалась с новыми цветами.
+    _selectedItem = item.copyWith(palette: palette);
+    // И в списке — чтобы фильтр по цвету работал по актуальным данным.
+    final idx = _items.indexWhere((e) => e.id == item.id);
+    if (idx != -1) {
+      _items[idx] = _selectedItem!;
+    }
+    notifyListeners();
+  }
+
+  /// Массовый пересчёт палитры для всех изображений коллекции.
+  ///
+  /// [onProgress] вызывается после каждого элемента. После завершения
+  /// перезагружает список и обновляет выбранный элемент.
+  Future<int> regenerateAllPalettes({
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final count = await _service.regenerateAllPalettes(onProgress: onProgress);
+    await refreshItems();
+    // Обновим и выбранный элемент, если он есть в коллекции.
+    if (_selectedItem != null) {
+      final fresh = _items.firstWhere(
+        (e) => e.id == _selectedItem!.id,
+        orElse: () => _selectedItem!,
+      );
+      _selectedItem = fresh;
+    }
+    notifyListeners();
+    return count;
+  }
+
   // ─────────────────────── МАССОВОЕ ВЫДЕЛЕНИЕ ───────────────────────
 
   /// Идентификаторы выбранных элементов (Ctrl/Shift-клик, Ctrl+A).
