@@ -162,8 +162,7 @@ class _MainScreenState extends State<MainScreen> {
       // AppBar сам по себе прозрачный, а стекло рендерит flexibleSpace.
       backgroundColor = Colors.transparent;
 
-      // «Стекло»: blur → fill. Затем оборачиваем в Container с нижней
-      // границей — она рисуется поверх blur, не размытая.
+      // «Стекло»: blur → fill.
       final glassContent = blurOn
           ? BackdropFilter(
               filter: ImageFilter.blur(
@@ -175,9 +174,11 @@ class _MainScreenState extends State<MainScreen> {
             )
           : ColoredBox(color: context.panelColors.panel);
 
+      // Нижняя граница AppBar рисуется ЧЕРЕЗ foregroundDecoration —
+      // поверх BackdropFilter, не размытая. decoration бы оказался
+      // под blur и стал невидимым.
       flexibleSpace = Container(
-        decoration: BoxDecoration(
-          color: Colors.transparent,
+        foregroundDecoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(color: context.panelBorderColor, width: 1),
           ),

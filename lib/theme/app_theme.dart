@@ -119,8 +119,10 @@ class AppTheme {
   //
   //  Стекло видно только тогда, когда за панелью что-то есть. Поэтому
   //  scaffold-фон здесь — контрастный градиент, а панели — белые/чёрные
-  //  с прозрачностью 35% (раньше было 60-70% — панели сливались с фоном),
-  //  поверх BackdropFilter с σ = 40 px (раньше 30 — слишком мягко).
+  //  с прозрачностью 55% (раньше было 80% — панели сливались с фоном
+  //  в opaque-простыню; 35% было слишком прозрачно — слияние в одну
+  //  стеклянную поверхность без видимых краёв), поверх BackdropFilter
+  //  с σ = 40 px + видимая граница 1px в [FrostedPanel].
 
   static ThemeData get _iosFrostedLight {
     final scheme = ColorScheme.fromSeed(
@@ -131,11 +133,14 @@ class AppTheme {
       scheme: scheme,
       brightness: Brightness.light,
       design: AppDesignSystem.iosFrosted,
-      // Мягкое стекло Apple: тинт 35% (раньше было 80% — панели сливаются
-      // с фоном). Теперь 65% wallpaper-градиента просвечивает сквозь
-      // панели, и эффект матового стекла становится визуально заметным.
-      panelColor: const Color(0x59FFFFFF), // white 35%
-      contentBackground: const Color(0x40FFFFFF), // white 25%
+      // Мягкое стекло Apple: тинт 55% — компромисс между «виден
+      // wallpaper под стеклом» и «панель читается как отдельный блок».
+      // Раньше было 80% (панель opaque, стекло не видно) — поставил 35%,
+      // но пользователь сообщил: «весь интерфейс просто накрыт матовым
+      // стеклом» — панели слились в одну поверхность. 55% + видимая
+      // граница (см. [FrostedPanel]) дают отдельные стеклянные плитки.
+      panelColor: const Color(0x8CFFFFFF), // white 55%
+      contentBackground: const Color(0x73FFFFFF), // white 45%
       // Палитра усилена на ~30%: после размытия σ=40 фон остаётся
       // достаточно контрастным, чтобы «стекло» читалось.
       wallpaper: const LinearGradient(
@@ -161,11 +166,10 @@ class AppTheme {
       scheme: scheme,
       brightness: Brightness.dark,
       design: AppDesignSystem.iosFrosted,
-      // Те же 35%, что и в светлой теме — панель «стеклянная», а не
-      // opaque. Раньше 80% делали панель почти непрозрачной — стекло
-      // не читалось.
-      panelColor: const Color(0x591C1C1E), // iOS dark gray 35%
-      contentBackground: const Color(0x401C1C1E), // 25%
+      // Те же 55% тинта + видимая граница вокруг каждой панели —
+      // иначе панели сливаются в одну стеклянную поверхность.
+      panelColor: const Color(0x8C1C1C1E), // iOS dark gray 55%
+      contentBackground: const Color(0x731C1C1E), // 45%
       // Более глубокие и насыщенные тона — после blur σ=40 видна
       // разница между секциями градиента, и стекло «работает».
       wallpaper: const LinearGradient(
@@ -566,6 +570,26 @@ class FrostedPanel extends StatelessWidget {
     if (borderRadius > 0) {
       panel = ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
+        child: panel,
+      );
+    }
+
+    // В iOS-темах добавляем видимую границу ПОВЕРХ стекла (через
+    // foregroundDecoration) — иначе BackdropFilter размывает границу,
+    // и панели сливаются в одну стеклянную простыню. foregroundDecoration
+    // рисуется ПОСЛЕ child, поэтому не подвергается blur.
+    if (isGlass && shape == null) {
+      final border = Border.all(
+        color: context.panelBorderColor,
+        width: 1,
+      );
+      panel = Container(
+        foregroundDecoration: BoxDecoration(
+          border: border,
+          borderRadius: borderRadius > 0
+              ? BorderRadius.circular(borderRadius)
+              : null,
+        ),
         child: panel,
       );
     }
