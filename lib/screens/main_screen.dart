@@ -143,8 +143,14 @@ class _MainScreenState extends State<MainScreen> {
   /// AppBar с эффектом стекла в iOS-темах.
   ///
   /// В Material — обычный opaque AppBar (через AppBarTheme).
-  /// В iOS Frosted — transparent фон + BackdropFilter σ=30.
-  /// В iOS Transparent — transparent фон + полупрозрачный цвет панели.
+  /// В iOS Frosted — transparent фон + BackdropFilter σ=40 + нижняя граница
+  /// (чтобы шапка визуально отделялась от контента).
+  /// В iOS Transparent — transparent фон + полупрозрачный цвет панели +
+  /// нижняя граница.
+  ///
+  /// Кнопки в шапке в iOS-темах — «стеклянные»: с translucent background,
+  /// чтобы элементы управления тоже были в стиле матового стекла (а не
+  /// выпадали из него, как раньше).
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     final isGlass = context.designSystem != AppDesignSystem.material;
     final blurOn = context.backdropBlurEnabled && context.backdropBlurSigma > 0;
@@ -153,22 +159,34 @@ class _MainScreenState extends State<MainScreen> {
     Color? backgroundColor;
 
     if (isGlass) {
-      // В iOS-темах AppBar сам по себе прозрачный, а стекло рендерит
-      // flexibleSpace через BackdropFilter.
+      // AppBar сам по себе прозрачный, а стекло рендерит flexibleSpace.
       backgroundColor = Colors.transparent;
-      if (blurOn) {
-        flexibleSpace = BackdropFilter(
-          filter: ImageFilter.blur(
-            sigmaX: context.backdropBlurSigma,
-            sigmaY: context.backdropBlurSigma,
-            tileMode: TileMode.mirror,
+
+      // «Стекло»: blur → fill. Затем оборачиваем в Container с нижней
+      // границей — она рисуется поверх blur, не размытая.
+      final glassContent = blurOn
+          ? BackdropFilter(
+              filter: ImageFilter.blur(
+                sigmaX: context.backdropBlurSigma,
+                sigmaY: context.backdropBlurSigma,
+                tileMode: TileMode.mirror,
+              ),
+              child: ColoredBox(color: context.panelColors.panel),
+            )
+          : ColoredBox(color: context.panelColors.panel);
+
+      flexibleSpace = Container(
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          border: Border(
+            bottom: BorderSide(color: context.panelBorderColor, width: 1),
           ),
-          child: ColoredBox(color: context.panelColors.panel),
-        );
-      } else {
-        flexibleSpace = ColoredBox(color: context.panelColors.panel);
-      }
+        ),
+        child: glassContent,
+      );
     }
+
+    final buttonStyle = context.glassIconButtonStyle;
 
     return AppBar(
       title: const Text('коробка'),
@@ -178,11 +196,13 @@ class _MainScreenState extends State<MainScreen> {
         IconButton(
           tooltip: 'Настройки',
           icon: const Icon(Icons.settings_outlined),
+          style: buttonStyle,
           onPressed: () => _openSettings(context),
         ),
         IconButton(
           tooltip: 'Переключить тему (T)',
           icon: const Icon(Icons.dark_mode_outlined),
+          style: buttonStyle,
           onPressed: () => _toggleTheme(context),
         ),
       ],

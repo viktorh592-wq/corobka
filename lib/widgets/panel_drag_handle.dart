@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 /// Разделяемая перетаскиваемая граница между панелями (как в любых
 /// настольных приложениях: навели курсор на границу — зажали ЛКМ —
 /// потянули в сторону — ширина панели изменилась).
@@ -26,6 +28,13 @@ class _PanelDragHandleState extends State<PanelDragHandle> {
   Widget build(BuildContext context) {
     final active = _hovering || _dragging;
     final highlight = Theme.of(context).colorScheme.primary;
+    // В iOS-темах (стекло) стандартный dividerColor (8% прозрачности)
+    // практически не виден на размытом фоне — панели сливаются. Берём
+    // более контрастный panelBorderColor (18%), и граница снова читается.
+    final isGlass = context.designSystem != AppDesignSystem.material;
+    final dividerColor = isGlass
+        ? context.panelBorderColor
+        : Theme.of(context).dividerColor;
 
     return MouseRegion(
       // Курсор «изменить ширину колонки» — стандарт для границ панелей.
@@ -46,7 +55,7 @@ class _PanelDragHandleState extends State<PanelDragHandle> {
           child: Center(
             child: Container(
               width: 1,
-              color: Theme.of(context).dividerColor,
+              color: dividerColor,
             ),
           ),
         ),

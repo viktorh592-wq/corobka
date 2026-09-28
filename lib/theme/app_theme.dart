@@ -118,8 +118,9 @@ class AppTheme {
   // ─────────────────────────────────────────────────────────────────────
   //
   //  Стекло видно только тогда, когда за панелью что-то есть. Поэтому
-  //  scaffold-фон здесь — мягкий градиент, а панели — белые/чёрные
-  //  с прозрачностью 60-70%, поверх BackdropFilter с σ ≈ 30 px.
+  //  scaffold-фон здесь — контрастный градиент, а панели — белые/чёрные
+  //  с прозрачностью 35% (раньше было 60-70% — панели сливались с фоном),
+  //  поверх BackdropFilter с σ = 40 px (раньше 30 — слишком мягко).
 
   static ThemeData get _iosFrostedLight {
     final scheme = ColorScheme.fromSeed(
@@ -130,18 +131,23 @@ class AppTheme {
       scheme: scheme,
       brightness: Brightness.light,
       design: AppDesignSystem.iosFrosted,
-      panelColor: const Color(0xCCFFFFFF), // white 80%
-      contentBackground: const Color(0xB3FFFFFF), // white 70%
+      // Мягкое стекло Apple: тинт 35% (раньше было 80% — панели сливаются
+      // с фоном). Теперь 65% wallpaper-градиента просвечивает сквозь
+      // панели, и эффект матового стекла становится визуально заметным.
+      panelColor: const Color(0x59FFFFFF), // white 35%
+      contentBackground: const Color(0x40FFFFFF), // white 25%
+      // Палитра усилена на ~30%: после размытия σ=40 фон остаётся
+      // достаточно контрастным, чтобы «стекло» читалось.
       wallpaper: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color(0xFFE3ECFF), // soft sky
-          Color(0xFFFFE3F1), // pinkish
-          Color(0xFFE8FFE3), // mint
+          Color(0xFFBAD3FF), // насыщенный небесный
+          Color(0xFFFFB0D8), // насыщенный розовый
+          Color(0xFFB6F0BC), // насыщенный мятный
         ],
       ),
-      blurSigma: 30.0,
+      blurSigma: 40.0,
       blurEnabled: true,
     );
   }
@@ -155,18 +161,23 @@ class AppTheme {
       scheme: scheme,
       brightness: Brightness.dark,
       design: AppDesignSystem.iosFrosted,
-      panelColor: const Color(0xCC1C1C1E), // iOS dark gray 80%
-      contentBackground: const Color(0xB31C1C1E),
+      // Те же 35%, что и в светлой теме — панель «стеклянная», а не
+      // opaque. Раньше 80% делали панель почти непрозрачной — стекло
+      // не читалось.
+      panelColor: const Color(0x591C1C1E), // iOS dark gray 35%
+      contentBackground: const Color(0x401C1C1E), // 25%
+      // Более глубокие и насыщенные тона — после blur σ=40 видна
+      // разница между секциями градиента, и стекло «работает».
       wallpaper: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color(0xFF1A1A2E),
-          Color(0xFF16213E),
-          Color(0xFF0F1C2E),
+          Color(0xFF0F0F1F), // более глубокий тёмно-синий
+          Color(0xFF1F3A6E), // насыщенный синий (accent-блик)
+          Color(0xFF0A1E33), // более глубокий navy
         ],
       ),
-      blurSigma: 30.0,
+      blurSigma: 40.0,
       blurEnabled: true,
     );
   }
@@ -461,6 +472,43 @@ extension PanelColorsX on BuildContext {
   /// Декоративный градиент-фон под стеклянными панелями (только для iOS-тем).
   Gradient? get wallpaper =>
       Theme.of(this).extension<_DesignSystemExtension>()?.wallpaper;
+
+  /// Тонкая граница «стеклянной» панели: 1px, 18% прозрачности.
+  /// Используется в [FrostedPanel], [AppDialog], AppBar и [PanelDragHandle]
+  /// для визуального отделения панелей друг от друга (иначе они сливаются
+  /// в одну простыню из-за мягкого размытия).
+  Color get panelBorderColor {
+    final isDark = Theme.of(this).brightness == Brightness.dark;
+    return isDark
+        ? Colors.white.withValues(alpha: 0.18)
+        : Colors.black.withValues(alpha: 0.18);
+  }
+
+  /// Стиль [IconButton] для iOS-тем: полупрозрачная «стеклянная» подложка
+  /// с мягкой границей. Для Material-темы возвращает null — используется
+  /// стандартный M3-стиль кнопок.
+  ///
+  /// Применяется в AppBar (Настройки / Тема) и в действиях диалогов.
+  ButtonStyle? get glassIconButtonStyle {
+    if (designSystem == AppDesignSystem.material) return null;
+    final isDark = Theme.of(this).brightness == Brightness.dark;
+    return IconButton.styleFrom(
+      backgroundColor: isDark
+          ? Colors.white.withValues(alpha: 0.10)
+          : Colors.white.withValues(alpha: 0.55),
+      foregroundColor: isDark
+          ? Colors.white.withValues(alpha: 0.95)
+          : Colors.black.withValues(alpha: 0.85),
+      // hoverColor — fallback на стандартный behavior (ripple), но с
+      // чуть более заметным tintом при наведении (4-6% поверх bg).
+      hoverColor: isDark
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.white.withValues(alpha: 0.20),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(8)),
+      ),
+    );
+  }
 }
 
 /// Виджет-«стекло»: оборачивает ребёнка [BackdropFilter] + полупрозрачным

@@ -66,36 +66,58 @@ class AppDialog extends StatelessWidget {
 
     if (!isGlass) return dialog;
 
-    // iOS-темы: оборачиваем диалог в BackdropFilter + ClipRRect.
-    // Если blurEnabled=false (Transparent), берём просто ColoredBox
-    // с полупрозрачным фоном.
-    Widget wrapped = Material(
-      type: MaterialType.transparency,
+    // iOS-темы: glass dialog с border 1px + мягкой тенью.
+    //
+    // Порядок слоёв (снизу вверх):
+    //   1. BackdropFilter (размытие wallpaper-градиента под диалогом)
+    //   2. ColoredBox(dialogBg) — полупрозрачная заливка стекла
+    //   3. AlertDialog (content + actions)
+    //   4. ClipRRect(18) — скругление углов всего «стекла»
+    //   5. Container(decoration) — внешняя граница + тень поверх скругления
+    //      (border и shadow рисуются снаружи ClipRRect, чтобы не обрезаться)
+    Widget glass = ColoredBox(
+      color: dialogBg,
       child: dialog,
     );
 
     if (blurOn) {
-      wrapped = BackdropFilter(
+      glass = BackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: context.backdropBlurSigma,
           sigmaY: context.backdropBlurSigma,
           tileMode: TileMode.mirror,
         ),
-        child: ColoredBox(
-          color: dialogBg,
-          child: dialog,
-        ),
-      );
-    } else {
-      wrapped = ColoredBox(
-        color: dialogBg,
-        child: dialog,
+        child: glass,
       );
     }
 
-    return ClipRRect(
+    // Скругление углов всего «стекла» — backdrop + fill + content
+    // обрезаются по одному радиусу 18px.
+    glass = ClipRRect(
       borderRadius: BorderRadius.circular(18),
-      child: wrapped,
+      child: glass,
+    );
+
+    // Внешний декор: тонкая граница 1px (та же, что у панелей) +
+    // мягкая тень, чтобы диалог визуально отделялся от затемнённого
+    // фона showModal. Тень рисуется снаружи скругления — Flutter
+    // отрисовывает boxShadow поверх child даже при color: transparent.
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: context.panelBorderColor, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: brightness == Brightness.dark
+                ? Colors.black.withValues(alpha: 0.45)
+                : Colors.black.withValues(alpha: 0.20),
+            blurRadius: 24,
+            spreadRadius: 0,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: glass,
     );
   }
 }
