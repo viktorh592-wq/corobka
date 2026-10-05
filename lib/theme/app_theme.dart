@@ -13,10 +13,6 @@ enum AppDesignSystem {
   /// Opaque-панели, classic M3-палитра, скруглённые углы 8px.
   material,
 
-  /// iOS-style с матовым стеклом (frosted glass): панели полупрозрачные,
-  /// поверх — `BackdropFilter` с гауссовым размытием. Скруглённые углы 16px.
-  iosFrosted,
-
   /// iOS-style с прозрачными панелями (без размытия): панели просто
   /// полупрозрачные, фоновый градиент просвечивает напрямую.
   iosTransparent,
@@ -24,7 +20,7 @@ enum AppDesignSystem {
   /// iOS 27 / Liquid Glass — целевая дизайн-система по гайдлайну
   /// COROBKA_iOS27_LiquidGlass_UI_GUIDELINE.md.
   ///
-  /// Принципиальные отличия от [iosFrosted]:
+  /// Принципиальные отличия от iosTransparent:
   ///   • НЕТ глобального frosting-слоя на всё окно — контент (изображения)
   ///     остаётся резким и доминирует (§2.1, §25 гайдлайна).
   ///   • Стекло — только функциональный слой: тулбар, поиск, кнопки,
@@ -65,8 +61,6 @@ class AppTheme {
     switch (design) {
       case AppDesignSystem.material:
         return isDark ? _materialDark : _materialLight;
-      case AppDesignSystem.iosFrosted:
-        return isDark ? _iosFrostedDark : _iosFrostedLight;
       case AppDesignSystem.iosTransparent:
         return isDark ? _iosTransparentDark : _iosTransparentLight;
       case AppDesignSystem.iosLiquidGlass:
@@ -133,79 +127,6 @@ class AppTheme {
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  //  iOS FROSTED GLASS
-  // ─────────────────────────────────────────────────────────────────────
-  //
-  //  Стекло видно только тогда, когда за панелью что-то есть. Поэтому
-  //  scaffold-фон здесь — контрастный градиент, а панели — белые/чёрные
-  //  с прозрачностью 55% (раньше было 80% — панели сливались с фоном
-  //  в opaque-простыню; 35% было слишком прозрачно — слияние в одну
-  //  стеклянную поверхность без видимых краёв), поверх BackdropFilter
-  //  с σ = 40 px + видимая граница 1px в [FrostedPanel].
-
-  static ThemeData get _iosFrostedLight {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: iosAccent,
-      brightness: Brightness.light,
-    );
-    return _buildIos(
-      scheme: scheme,
-      brightness: Brightness.light,
-      design: AppDesignSystem.iosFrosted,
-      // Мягкое стекло Apple: тинт 55% — компромисс между «виден
-      // wallpaper под стеклом» и «панель читается как отдельный блок».
-      // Раньше было 80% (панель opaque, стекло не видно) — поставил 35%,
-      // но пользователь сообщил: «весь интерфейс просто накрыт матовым
-      // стеклом» — панели слились в одну поверхность. 55% + видимая
-      // граница (см. [FrostedPanel]) дают отдельные стеклянные плитки.
-      panelColor: const Color(0x8CFFFFFF), // white 55%
-      contentBackground: const Color(0x73FFFFFF), // white 45%
-      // Палитра усилена на ~30%: после размытия σ=40 фон остаётся
-      // достаточно контрастным, чтобы «стекло» читалось.
-      wallpaper: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color(0xFFBAD3FF), // насыщенный небесный
-          Color(0xFFFFB0D8), // насыщенный розовый
-          Color(0xFFB6F0BC), // насыщенный мятный
-        ],
-      ),
-      blurSigma: 40.0,
-      blurEnabled: true,
-    );
-  }
-
-  static ThemeData get _iosFrostedDark {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: iosAccent,
-      brightness: Brightness.dark,
-    );
-    return _buildIos(
-      scheme: scheme,
-      brightness: Brightness.dark,
-      design: AppDesignSystem.iosFrosted,
-      // Те же 55% тинта + видимая граница вокруг каждой панели —
-      // иначе панели сливаются в одну стеклянную поверхность.
-      panelColor: const Color(0x8C1C1C1E), // iOS dark gray 55%
-      contentBackground: const Color(0x731C1C1E), // 45%
-      // Более глубокие и насыщенные тона — после blur σ=40 видна
-      // разница между секциями градиента, и стекло «работает».
-      wallpaper: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color(0xFF0F0F1F), // более глубокий тёмно-синий
-          Color(0xFF1F3A6E), // насыщенный синий (accent-блик)
-          Color(0xFF0A1E33), // более глубокий navy
-        ],
-      ),
-      blurSigma: 40.0,
-      blurEnabled: true,
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
   //  iOS TRANSPARENT
   // ─────────────────────────────────────────────────────────────────────
   //
@@ -268,7 +189,7 @@ class AppTheme {
   //
   //  Целевая дизайн-система по гайдлайну COROBKA_iOS27_LiquidGlass.
   //
-  //  Принципиальные отличия от iosFrosted / iosTransparent:
+  //  Принципиальные отличия от iosTransparent:
   //    • scaffold — НЕ прозрачный. Под контентом — opaque цвет (без
   //      wallpaper-градиента). Контент остаётся резким (§2.1, §25).
   //    • панели (left / right) — слегка translucent, но НЕ размываются
@@ -351,25 +272,27 @@ class AppTheme {
       // Текстовые поля — стекло только для ПОЛЯ (одна поверхность на
       // поле, без вложенных стекол, §19). Реальная glass-обёртка
       // добавляется виджетом LiquidGlassSurface в местах использования.
+      // Скругление углов — небольшое (8px), как в Material Design:
+      // капсульная форма (capsule/999) выглядела слишком «слипшейся».
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: glassFillColor(brightness),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(RadiusTokens.capsule),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
             color: glassBorderColor(brightness),
             width: 1,
           ),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(RadiusTokens.capsule),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
             color: glassBorderColor(brightness),
             width: 1,
           ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(RadiusTokens.capsule),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
             color: scheme.primary.withValues(alpha: 0.8),
             width: 1.6,

@@ -9,6 +9,7 @@ import '../features/collection/collection_state.dart';
 import 'app_dialog.dart';
 import 'folder_color_dialog.dart';
 import 'folder_icon.dart';
+import 'glass_popup_menu.dart';
 
 /// Левая панель навигации по коллекции.
 ///
@@ -798,7 +799,7 @@ class _FolderTileState extends State<_FolderTile> {
         Overlay.of(context).context.findRenderObject() as RenderBox?;
     final screenSize = overlayBox?.size ?? MediaQuery.sizeOf(context);
 
-    final action = await showMenu<String>(
+    final action = await showGlassMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         position.dx,

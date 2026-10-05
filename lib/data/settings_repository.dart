@@ -27,7 +27,7 @@ class SettingsRepository {
   }
 
   /// Сохранение выбранной дизайн-системы интерфейса
-  /// (material / iosFrosted / iosTransparent).
+  /// (material / iosTransparent / iosLiquidGlass).
   Future<void> saveDesignSystem(String design) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kDesignSystem, design);

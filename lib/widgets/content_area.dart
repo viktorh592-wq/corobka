@@ -14,6 +14,7 @@ import 'color_sliders.dart';
 import 'duplicates_dialog.dart';
 import 'drop_zone.dart';
 import 'folder_icon.dart';
+import 'glass_popup_menu.dart';
 import 'lightbox_viewer.dart';
 import 'media_placeholder.dart';
 
@@ -145,7 +146,7 @@ class _ToolbarState extends State<_Toolbar> {
       );
     }
 
-    final selected = await showMenu<SortMode>(
+    final selected = await showGlassMenu<SortMode>(
       context: context,
       position: position,
       items: [
@@ -1029,7 +1030,7 @@ class _ItemCard extends StatelessWidget {
     if (!context.mounted) return;
 
     final isTrash = state.isTrashView;
-    final action = await showMenu<String>(
+    final action = await showGlassMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         position.dx,

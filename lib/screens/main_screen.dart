@@ -168,8 +168,8 @@ class _MainScreenState extends State<MainScreen> {
     if (isLiquidGlass) {
       // iOS 27 / Liquid Glass: AppBar прозрачный, гибкое пространство
       // занимает LiquidGlassSurface — «floating functional glass layer».
-      // В отличие от iosFrosted, здесь blur применяется только к самой
-      // шапке (небольшой контрол), а не ко всему окну.
+      // Здесь blur применяется только к самой шапке (небольшой контрол),
+      // а не ко всему окну.
       backgroundColor = Colors.transparent;
       flexibleSpace = const Padding(
         padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -292,14 +292,6 @@ class _MainScreenState extends State<MainScreen> {
             const SizedBox(height: 12),
             const Divider(height: 1),
             const SizedBox(height: 12),
-            // ── Палитра цветов ──
-            _PaletteRegenSection(
-              state: state,
-              messenger: ScaffoldMessenger.of(dialogContext),
-            ),
-            const SizedBox(height: 12),
-            const Divider(height: 1),
-            const SizedBox(height: 12),
             // ── Журнал (лог) приложения и плагина ──
             _LogSection(messenger: ScaffoldMessenger.of(dialogContext)),
           ],
@@ -350,8 +342,9 @@ class _DesignSystemSection extends StatelessWidget {
         const SizedBox(height: 4),
         const Text(
           'Дизайн-система интерфейса. Material — классический M3-стиль, '
-          'iOS Frosted — матовое стекло с размытием, iOS Transparent — '
-          'полупрозрачные панели без размытия.',
+          'iOS Transparent — полупрозрачные панели без размытия, '
+          'iOS 27 · Liquid Glass — функциональное стекло (тулбар, поиск, '
+          'диалоги) с капсульными радиусами и мягкими тенями.',
         ),
         const SizedBox(height: 8),
         // Сегментный контрол дизайн-системы (3 варианта).
@@ -404,114 +397,11 @@ class _DesignSystemSection extends StatelessWidget {
     switch (design) {
       case AppDesignSystem.material:
         return 'Material Design';
-      case AppDesignSystem.iosFrosted:
-        return 'iOS · матовое стекло';
       case AppDesignSystem.iosTransparent:
         return 'iOS · прозрачная';
       case AppDesignSystem.iosLiquidGlass:
         return 'iOS 27 · Liquid Glass';
     }
-  }
-}
-
-/// Секция массового пересчёта цветовой палитры в настройках.
-///
-/// После увеличения `maximumColorCount` (5 → 10) в [PaletteService] старые
-/// изображения в коллекции всё ещё хранят палитру из 5 цветов. Эта секция
-/// позволяет пересчитать палитру разом для всех существующих картинок.
-class _PaletteRegenSection extends StatefulWidget {
-  const _PaletteRegenSection({required this.state, required this.messenger});
-
-  final CollectionState state;
-  final ScaffoldMessengerState messenger;
-
-  @override
-  State<_PaletteRegenSection> createState() => _PaletteRegenSectionState();
-}
-
-class _PaletteRegenSectionState extends State<_PaletteRegenSection> {
-  bool _running = false;
-  int _done = 0;
-  int _total = 0;
-
-  Future<void> _run() async {
-    setState(() {
-      _running = true;
-      _done = 0;
-      _total = 0;
-    });
-    try {
-      final count = await widget.state.regenerateAllPalettes(
-        onProgress: (done, total) {
-          if (!mounted) return;
-          setState(() {
-            _done = done;
-            _total = total;
-          });
-        },
-      );
-      if (!mounted) return;
-      widget.messenger.showSnackBar(
-        SnackBar(content: Text('Палитра обновлена для $count изображений')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      widget.messenger.showSnackBar(
-        SnackBar(content: Text('Ошибка: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _running = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Цветовая палитра',
-          style: Theme.of(context).textTheme.labelLarge,
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Палитра извлекается при импорте. После обновления числа цветов '
-          '(теперь их 10 вместо 5) старые изображения хранят устаревшую '
-          'палитру — пересчитайте, чтобы получить все 10 цветов.',
-        ),
-        const SizedBox(height: 8),
-        if (_running && _total > 0)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                LinearProgressIndicator(
-                  value: _done / _total,
-                  minHeight: 4,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$_done / $_total',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 6,
-          children: [
-            FilledButton.tonalIcon(
-              icon: const Icon(Icons.palette_outlined, size: 16),
-              label: const Text('Пересчитать для всех'),
-              onPressed: _running ? null : _run,
-            ),
-          ],
-        ),
-      ],
-    );
   }
 }
 
