@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'liquid_glass_tokens.dart';
+
 /// Дизайн-система интерфейса приложения.
 ///
 /// Пользователь выбирает оформление в Настройках. Каждая дизайн-система
@@ -18,6 +20,21 @@ enum AppDesignSystem {
   /// iOS-style с прозрачными панелями (без размытия): панели просто
   /// полупрозрачные, фоновый градиент просвечивает напрямую.
   iosTransparent,
+
+  /// iOS 27 / Liquid Glass — целевая дизайн-система по гайдлайну
+  /// COROBKA_iOS27_LiquidGlass_UI_GUIDELINE.md.
+  ///
+  /// Принципиальные отличия от [iosFrosted]:
+  ///   • НЕТ глобального frosting-слоя на всё окно — контент (изображения)
+  ///     остаётся резким и доминирует (§2.1, §25 гайдлайна).
+  ///   • Стекло — только функциональный слой: тулбар, поиск, кнопки,
+  ///     диалоги, popover-меню, тема-переключатель (§5.1).
+  ///   • Централизованные токены — см. [GlassTokens], [MotionTokens],
+  ///     [RadiusTokens] в `liquid_glass_tokens.dart`.
+  ///   • Капсульные/концентрические радиусы, мягкие тени, subtle edge.
+  ///   • Тема-переключатель — отдельный виджет со скользящим knob-ом
+  ///     (см. `LiquidGlassThemeToggle`).
+  iosLiquidGlass,
 }
 
 /// Настройки тем приложения «коробка».
@@ -52,6 +69,8 @@ class AppTheme {
         return isDark ? _iosFrostedDark : _iosFrostedLight;
       case AppDesignSystem.iosTransparent:
         return isDark ? _iosTransparentDark : _iosTransparentLight;
+      case AppDesignSystem.iosLiquidGlass:
+        return isDark ? _iosLiquidGlassDark : _iosLiquidGlassLight;
     }
   }
 
@@ -240,6 +259,219 @@ class AppTheme {
       ),
       blurSigma: 0.0,
       blurEnabled: false,
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  iOS 27 / LIQUID GLASS
+  // ─────────────────────────────────────────────────────────────────────
+  //
+  //  Целевая дизайн-система по гайдлайну COROBKA_iOS27_LiquidGlass.
+  //
+  //  Принципиальные отличия от iosFrosted / iosTransparent:
+  //    • scaffold — НЕ прозрачный. Под контентом — opaque цвет (без
+  //      wallpaper-градиента). Контент остаётся резким (§2.1, §25).
+  //    • панели (left / right) — слегка translucent, но НЕ размываются
+  //      BackdropFilter-ом. Только subtle edge + мягкая тень.
+  //    • BackdropFilter применяется только к маленьким контролам через
+  //      [LiquidGlassSurface] (тулбар, поиск, диалоги, popover).
+  //    • Тематическая палитра сохраняет iOS-синий (#007AFF), но без
+  //      wallpaper — фон однотонный, нейтральный.
+
+  static ThemeData get _iosLiquidGlassLight {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: iosAccent,
+      brightness: Brightness.light,
+    );
+    return _buildLiquidGlass(
+      scheme: scheme,
+      brightness: Brightness.light,
+      // Контентная область — opaque, БЕЗ wallpaper под ней (§2.1).
+      // Очень светлый нейтральный, как iOS systemGroupedBackground.
+      contentBackground: const Color(0xFFF2F2F7),
+      // Боковые панели — чуть темнее контента, чтобы читалась граница,
+      // но НЕ прозрачные к wallpaper (его нет).
+      panelColor: const Color(0xFFE5E5EA),
+    );
+  }
+
+  static ThemeData get _iosLiquidGlassDark {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: iosAccent,
+      brightness: Brightness.dark,
+    );
+    return _buildLiquidGlass(
+      scheme: scheme,
+      brightness: Brightness.dark,
+      // iOS systemGroupedBackground (dark).
+      contentBackground: const Color(0xFF000000),
+      // Боковые панели — systemGray6 (dark), чуть светлее контента.
+      panelColor: const Color(0xFF1C1C1E),
+    );
+  }
+
+  static ThemeData _buildLiquidGlass({
+    required ColorScheme scheme,
+    required Brightness brightness,
+    required Color panelColor,
+    required Color contentBackground,
+  }) {
+    final isDark = brightness == Brightness.dark;
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: scheme,
+      // scaffold — opaque. Никакого wallpaper, никакой прозрачности.
+      // Контент (изображения) остаётся резким — §2.1, §25 гайдлайна.
+      scaffoldBackgroundColor: contentBackground,
+      appBarTheme: AppBarTheme(
+        // AppBar сам по себе прозрачный — стекло рендерит flexibleSpace
+        // в MainScreen._buildAppBar (через LiquidGlassSurface).
+        backgroundColor: Colors.transparent,
+        foregroundColor: scheme.onSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        centerTitle: false,
+        titleTextStyle: TextStyle(
+          color: scheme.onSurface,
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+          fontFamily: '-apple-system',
+          fontFamilyFallback: const ['Inter', 'Roboto', 'Segoe UI'],
+        ),
+      ),
+      // Карточки — без стекла (изображения = контент, не «стеклянные плитки»).
+      cardTheme: const CardThemeData(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(RadiusTokens.medium)),
+        ),
+      ),
+      // Текстовые поля — стекло только для ПОЛЯ (одна поверхность на
+      // поле, без вложенных стекол, §19). Реальная glass-обёртка
+      // добавляется виджетом LiquidGlassSurface в местах использования.
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: glassFillColor(brightness),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(RadiusTokens.capsule),
+          borderSide: BorderSide(
+            color: glassBorderColor(brightness),
+            width: 1,
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(RadiusTokens.capsule),
+          borderSide: BorderSide(
+            color: glassBorderColor(brightness),
+            width: 1,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(RadiusTokens.capsule),
+          borderSide: BorderSide(
+            color: scheme.primary.withValues(alpha: 0.8),
+            width: 1.6,
+          ),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
+      ),
+      // Диалоги — glass surface. Полная реализация в [AppDialog]:
+      // BackdropFilter + translucent fill + border + soft shadow.
+      dialogTheme: DialogThemeData(
+        backgroundColor: glassFillColor(brightness),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(RadiusTokens.large),
+          side: BorderSide(color: glassBorderColor(brightness), width: 1),
+        ),
+      ),
+      // Контекстные меню (PopupMenu) — тоже стекло.
+      popupMenuTheme: PopupMenuThemeData(
+        color: glassFillColor(brightness),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(RadiusTokens.medium),
+          side: BorderSide(color: glassBorderColor(brightness), width: 1),
+        ),
+      ),
+      // SnackBar — маленький floating glass toast.
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: glassFillColor(brightness),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(RadiusTokens.medium),
+          side: BorderSide(color: glassBorderColor(brightness), width: 1),
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: glassFillColor(brightness),
+        elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(RadiusTokens.large),
+            topRight: Radius.circular(RadiusTokens.large),
+          ),
+        ),
+      ),
+      // Кнопки с заливкой — capsule, акцентный цвет с лёгкой прозрачностью.
+      filledButtonTheme: FilledButtonThemeData(
+        style: liquidGlassButtonStyle(
+          brightness: brightness,
+          prominent: true,
+        ),
+      ),
+      // TextButton — capsule glass secondary (для «Импорт», «Папка» и т.д.).
+      textButtonTheme: TextButtonThemeData(
+        style: liquidGlassButtonStyle(brightness: brightness),
+      ),
+      // OutlinedButton — тоже capsule glass (в старых темах у него был
+      // outlined border, здесь он не нужен — границу рисует сам glass).
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: liquidGlassButtonStyle(brightness: brightness),
+      ),
+      // Карточки — opaque, не стекло (контент = контент).
+      cardColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+      // Chip-ы — capsule glass.
+      chipTheme: ChipThemeData(
+        backgroundColor: glassFillColor(brightness),
+        side: BorderSide(color: glassBorderColor(brightness), width: 1),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(RadiusTokens.capsule),
+        ),
+        labelStyle: TextStyle(
+          color: scheme.onSurface,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+        selectedColor: scheme.primary.withValues(alpha: 0.20),
+        checkmarkColor: scheme.primary,
+      ),
+      // Divider — тонкий, нейтральный.
+      dividerTheme: DividerThemeData(
+        color: glassBorderColor(brightness),
+        thickness: 0.5,
+        space: 1,
+      ),
+      extensions: [
+        PanelColors(
+          panel: panelColor,
+          contentBackground: contentBackground,
+        ),
+        const _DesignSystemExtension(
+          design: AppDesignSystem.iosLiquidGlass,
+          // Нет wallpaper — FrostedScaffoldBackground вернёт child как есть.
+          wallpaper: null,
+          // Нет глобального blur — BackdropFilter только в LiquidGlassSurface.
+          blurSigma: 0,
+          blurEnabled: false,
+        ),
+      ],
     );
   }
 
@@ -493,8 +725,17 @@ extension PanelColorsX on BuildContext {
   /// стандартный M3-стиль кнопок.
   ///
   /// Применяется в AppBar (Настройки / Тема) и в действиях диалогов.
+  ///
+  /// Для [AppDesignSystem.iosLiquidGlass] используется централизованный
+  /// стиль из [liquidGlassIconButtonStyle] (capsule glass с subtle edge,
+  /// hover/pressed states — см. гайдлайн §9 BUTTON SYSTEM).
   ButtonStyle? get glassIconButtonStyle {
     if (designSystem == AppDesignSystem.material) return null;
+    if (designSystem == AppDesignSystem.iosLiquidGlass) {
+      return liquidGlassIconButtonStyle(
+        brightness: Theme.of(this).brightness,
+      );
+    }
     final isDark = Theme.of(this).brightness == Brightness.dark;
     return IconButton.styleFrom(
       backgroundColor: isDark
@@ -513,6 +754,11 @@ extension PanelColorsX on BuildContext {
       ),
     );
   }
+
+  /// True, если активна дизайн-система iOS 27 / Liquid Glass.
+  /// Используется в [MainScreen] для решения: рисовать ли кастомный
+  /// [LiquidGlassThemeToggle] вместо обычной IconButton.
+  bool get isLiquidGlass => designSystem == AppDesignSystem.iosLiquidGlass;
 }
 
 /// Виджет-«стекло»: оборачивает ребёнка [BackdropFilter] + полупрозрачным

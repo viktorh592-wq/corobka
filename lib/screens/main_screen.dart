@@ -10,9 +10,11 @@ import '../features/collection/collection_state.dart';
 import '../features/logging/log_service.dart';
 import '../features/settings/theme_provider.dart';
 import '../theme/app_theme.dart';
+import '../theme/liquid_glass_tokens.dart';
 import '../widgets/app_dialog.dart';
 import '../widgets/content_area.dart';
 import '../widgets/left_panel.dart';
+import '../widgets/liquid_glass_theme_toggle.dart';
 import '../widgets/panel_drag_handle.dart';
 import '../widgets/right_panel.dart';
 
@@ -147,6 +149,10 @@ class _MainScreenState extends State<MainScreen> {
   /// (чтобы шапка визуально отделялась от контента).
   /// В iOS Transparent — transparent фон + полупрозрачный цвет панели +
   /// нижняя граница.
+  /// В iOS 27 / Liquid Glass — transparent фон AppBar, но поверх него
+  /// плавает [LiquidGlassSurface] (стекло) — гайдлайн §6.1, §20: «floating
+  /// functional glass layer». Тема-переключатель заменяется на кастомный
+  /// [LiquidGlassThemeToggle] (гайдлайн §15).
   ///
   /// Кнопки в шапке в iOS-темах — «стеклянные»: с translucent background,
   /// чтобы элементы управления тоже были в стиле матового стекла (а не
@@ -154,11 +160,33 @@ class _MainScreenState extends State<MainScreen> {
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     final isGlass = context.designSystem != AppDesignSystem.material;
     final blurOn = context.backdropBlurEnabled && context.backdropBlurSigma > 0;
+    final isLiquidGlass = context.isLiquidGlass;
 
     Widget? flexibleSpace;
     Color? backgroundColor;
 
-    if (isGlass) {
+    if (isLiquidGlass) {
+      // iOS 27 / Liquid Glass: AppBar прозрачный, гибкое пространство
+      // занимает LiquidGlassSurface — «floating functional glass layer».
+      // В отличие от iosFrosted, здесь blur применяется только к самой
+      // шапке (небольшой контрол), а не ко всему окну.
+      backgroundColor = Colors.transparent;
+      flexibleSpace = const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: LiquidGlassSurface(
+          radius: RadiusTokens.large,
+          applyBlur: true,
+          blurSigma: GlassTokens.blurSmall,
+          elevation: true,
+          highlight: true,
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: SizedBox(
+            height: 44,
+            child: SizedBox.shrink(), // контент задаётся через title/actions
+          ),
+        ),
+      );
+    } else if (isGlass) {
       // AppBar сам по себе прозрачный, а стекло рендерит flexibleSpace.
       backgroundColor = Colors.transparent;
 
@@ -189,6 +217,17 @@ class _MainScreenState extends State<MainScreen> {
 
     final buttonStyle = context.glassIconButtonStyle;
 
+    // В Liquid Glass тема-переключатель — отдельный виджет со скользящим
+    // glass knob-ом (гайдлайн §15).
+    final themeToggle = isLiquidGlass
+        ? const LiquidGlassThemeToggle()
+        : IconButton(
+            tooltip: 'Переключить тему (T)',
+            icon: const Icon(Icons.dark_mode_outlined),
+            style: buttonStyle,
+            onPressed: () => _toggleTheme(context),
+          );
+
     return AppBar(
       title: const Text('коробка'),
       backgroundColor: backgroundColor,
@@ -200,11 +239,9 @@ class _MainScreenState extends State<MainScreen> {
           style: buttonStyle,
           onPressed: () => _openSettings(context),
         ),
-        IconButton(
-          tooltip: 'Переключить тему (T)',
-          icon: const Icon(Icons.dark_mode_outlined),
-          style: buttonStyle,
-          onPressed: () => _toggleTheme(context),
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: Center(child: themeToggle),
         ),
       ],
     );
@@ -371,6 +408,8 @@ class _DesignSystemSection extends StatelessWidget {
         return 'iOS · матовое стекло';
       case AppDesignSystem.iosTransparent:
         return 'iOS · прозрачная';
+      case AppDesignSystem.iosLiquidGlass:
+        return 'iOS 27 · Liquid Glass';
     }
   }
 }

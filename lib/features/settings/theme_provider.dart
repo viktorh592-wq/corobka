@@ -21,7 +21,11 @@ class ThemeProvider extends ChangeNotifier {
   final SettingsRepository _repository;
 
   AppThemeMode _mode = AppThemeMode.system;
-  AppDesignSystem _design = AppDesignSystem.material;
+
+  /// Целевая дизайн-система по умолчанию — iOS 27 / Liquid Glass
+  /// (см. COROBKA_iOS27_LiquidGlass_UI_GUIDELINE.md). Пользователь может
+  /// переключиться на Material / iOS Frosted / iOS Transparent в Настройках.
+  AppDesignSystem _design = AppDesignSystem.iosLiquidGlass;
 
   AppThemeMode get mode => _mode;
   AppDesignSystem get design => _design;

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../data/models/item.dart';
 import '../features/collection/collection_state.dart';
 import '../theme/app_theme.dart';
+import '../theme/liquid_glass_tokens.dart';
 import 'app_dialog.dart';
 import 'color_sliders.dart';
 import 'duplicates_dialog.dart';
@@ -194,36 +195,39 @@ class _ToolbarState extends State<_Toolbar> {
     final state = widget.state;
     final isTrash = state.isTrashView;
 
-    // FrostedPanel в iOS-темах даёт эффект стекла (blur + полупрозрачный
-    // фон). В Material — обычный Material widget без изменений.
-    return FrostedPanel(
-      child: Material(
-        type: MaterialType.transparency,
-        elevation: 0,
-        // Горизонтальный скролл: при узком окне (или широких боковых панелях)
-        // тулбар не переполняется, а прокручивается. IntrinsicWidth даёт Row
-        // фиксированную ширину (Spacer/Expanded остаются корректными), а при
-        // нехватке места содержимое прокручивается.
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                child: IntrinsicWidth(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        // Поле поиска: закруглённое как кнопки (radius 20 —
-                        // такой же, как у FilledButton/OutlinedButton в M3),
-                      // длина увеличена на 40% (200 → 280).
-                      SizedBox(
-                        width: 280,
-                        child: TextField(
+    // В Liquid Glass тулбар — это «floating functional glass layer» (§6.1,
+    // §20 гайдлайна): обёрнут в LiquidGlassSurface, контент под ним
+    // остаётся резким. В остальных темах — стандартный FrostedPanel.
+    final isLiquidGlass = context.isLiquidGlass;
+    final toolbarContent = Material(
+      type: MaterialType.transparency,
+      elevation: 0,
+      // Горизонтальный скролл: при узком окне (или широких боковых панелях)
+      // тулбар не переполняется, а прокручивается. IntrinsicWidth даёт Row
+      // фиксированную ширину (Spacer/Expanded остаются корректными), а при
+      // нехватке места содержимое прокручивается.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: IntrinsicWidth(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                        // Поле поиска: capsule-форма (radius = capsule),
+                        // длина увеличена на 20% (280 → 336) согласно
+                        // гайдлайну COROBKA_iOS27 §18 «SEARCH FIELD».
+                        // В Liquid Glass поле дополнительно оборачивается
+                        // LiquidGlassSurface для эффекта стекла (§5.1).
+                        SizedBox(
+                          width: 336,
+                          child: TextField(
                           controller: _searchController,
                           textInputAction: TextInputAction.search,
                           decoration: InputDecoration(
@@ -374,9 +378,30 @@ class _ToolbarState extends State<_Toolbar> {
             ),
           );
         },
-      ), // LayoutBuilder (child of Material)
-      ), // Material (child of FrostedPanel)
-    ); // FrostedPanel — return statement
+      ),
+    );
+
+    if (isLiquidGlass) {
+      // Liquid Glass: тулбар как floating glass surface, контент под ним
+      // остаётся резким (§6.1, §20). Padding around — чтобы стекло
+      // визуально «парилo» над content background, а не прилипал к краям.
+      return Container(
+        color: context.panelColors.contentBackground,
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+        child: LiquidGlassSurface(
+          radius: RadiusTokens.large,
+          applyBlur: true,
+          blurSigma: GlassTokens.blurSmall,
+          elevation: true,
+          highlight: true,
+          child: toolbarContent,
+        ),
+      );
+    }
+
+    // Другие темы — FrostedPanel (для iOS Frosted/Transparent даёт
+    // полупрозрачный фон + blur, для Material — opaque Material).
+    return FrostedPanel(child: toolbarContent);
   }
 
   /// Диалог поиска дубликатов (по одинаковому содержимому файлов).
