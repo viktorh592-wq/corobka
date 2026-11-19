@@ -343,20 +343,22 @@ class _DesignSystemSection extends StatelessWidget {
           'iOS 27 · Liquid Glass — функциональное стекло (тулбар, поиск, '
           'диалоги) с капсульными радиусами и мягкими тенями, '
           'Неоморфизм · Smart Home — тёмный soft-neumorphism по '
-          'спецификации smart_home_dashboard_design_spec.json '
-          '(фон #10141F, поверхности #202633, фиолетовый акцент #A77BFF).',
+          'попиксельной спецификации thermostat_neon_design_spec.json '
+          '(фон-градиент #31334A→#181B24, панели #20242F, неон #926AF8, '
+          'активные капсулы #C1A7FE→#A17BFC с тёмным текстом #180344; '
+          'прямые линии не скругляются).',
         ),
         const SizedBox(height: 8),
         // Сегментный контрол дизайн-системы (4 варианта).
-        Wrap(
-          spacing: 8,
-          runSpacing: 6,
-          children: [
+        _SegmentRow(
+          isNeumorphic:
+              context.designSystem == AppDesignSystem.neumorphicSmartHome,
+          options: [
             for (final design in AppDesignSystem.values)
-              ChoiceChip(
-                label: Text(_designLabel(design)),
+              _SegmentOption(
+                label: _designLabel(design),
                 selected: theme.design == design,
-                onSelected: (_) => theme.setDesign(design),
+                onTap: () => theme.setDesign(design),
               ),
           ],
         ),
@@ -367,24 +369,24 @@ class _DesignSystemSection extends StatelessWidget {
           style: Theme.of(context).textTheme.labelLarge,
         ),
         const SizedBox(height: 4),
-        Wrap(
-          spacing: 8,
-          runSpacing: 6,
-          children: [
-            ChoiceChip(
-              label: const Text('Светлая'),
+        _SegmentRow(
+          isNeumorphic:
+              context.designSystem == AppDesignSystem.neumorphicSmartHome,
+          options: [
+            _SegmentOption(
+              label: 'Светлая',
               selected: theme.mode == AppThemeMode.light,
-              onSelected: (_) => theme.setMode(AppThemeMode.light),
+              onTap: () => theme.setMode(AppThemeMode.light),
             ),
-            ChoiceChip(
-              label: const Text('Тёмная'),
+            _SegmentOption(
+              label: 'Тёмная',
               selected: theme.mode == AppThemeMode.dark,
-              onSelected: (_) => theme.setMode(AppThemeMode.dark),
+              onTap: () => theme.setMode(AppThemeMode.dark),
             ),
-            ChoiceChip(
-              label: const Text('Системная'),
+            _SegmentOption(
+              label: 'Системная',
               selected: theme.mode == AppThemeMode.system,
-              onSelected: (_) => theme.setMode(AppThemeMode.system),
+              onTap: () => theme.setMode(AppThemeMode.system),
             ),
           ],
         ),
@@ -404,6 +406,137 @@ class _DesignSystemSection extends StatelessWidget {
       case AppDesignSystem.neumorphicSmartHome:
         return 'Неоморфизм · Smart Home';
     }
+  }
+}
+
+/// Строка сегментного переключателя в настройках.
+///
+/// Для «Неоморфизм · Smart Home» рисуется в стиле референса
+/// (docs/design/thermostat_neon_design_spec.json): тёмная капсула-вставка
+/// (#11141D → #191C25), выбранная опция — светло-фиолетовая таблетка с
+/// вертикальным градиентом #C1A7FE → #A17BFC, тёмным текстом #180344 и
+/// мягким неоновым свечением; невыбранная — прозрачная, с текстом #A7ABBD
+/// (точная копия «Auto» / «Cool» / «Heat» из референса). Для остальных
+/// дизайн-систем — обычные ChoiceChip-ы.
+class _SegmentRow extends StatelessWidget {
+  const _SegmentRow({required this.isNeumorphic, required this.options});
+
+  final bool isNeumorphic;
+  final List<_SegmentOption> options;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isNeumorphic) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        children: [
+          for (final option in options)
+            ChoiceChip(
+              label: Text(option.label),
+              selected: option.selected,
+              onSelected: (_) => option.onTap?.call(),
+            ),
+        ],
+      );
+    }
+    // Капсула-вставка из референса (§ контейнер): градиент
+    // #11141D → #191C25, отступ 3px вокруг таблеток.
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF11141D), Color(0xFF191C25)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          for (final option in options) _NeuSegmentPill(option: option),
+        ],
+      ),
+    );
+  }
+}
+
+/// Опция сегментного переключателя (общая для всех дизайн-систем).
+class _SegmentOption {
+  const _SegmentOption({
+    required this.label,
+    required this.selected,
+    this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+}
+
+/// Таблетка сегмента в стиле активной кнопки «Auto» из референса.
+class _NeuSegmentPill extends StatelessWidget {
+  const _NeuSegmentPill({required this.option});
+
+  final _SegmentOption option;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = option.selected;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        // Активная таблетка — вертикальный градиент референса
+        // (#C1A7FE → #A17BFC, § активная_кнопка_Auto).
+        gradient: selected
+            ? const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFC1A7FE), Color(0xFFA17BFC)],
+              )
+            : null,
+        // Мягкое фиолетовое свечение активной капсулы
+        // (§ css_рецепты: box-shadow 0 0 … rgba(146,106,248,.35)).
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF926AF8).withValues(alpha: 0.35),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : const [],
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: option.onTap,
+          customBorder: const StadiumBorder(),
+          // Hover — лёгкий белый тинт (§ состояния_для_реализации).
+          hoverColor:
+              Colors.white.withValues(alpha: selected ? 0.12 : 0.06),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            child: Text(
+              option.label,
+              style: TextStyle(
+                fontSize: 13,
+                // Текст активной капсулы — тёмный фиолетово-синий
+                // #180344, неактивной — серо-лавандовый #A7ABBD.
+                color: selected
+                    ? const Color(0xFF180344)
+                    : const Color(0xFFA7ABBD),
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

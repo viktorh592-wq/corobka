@@ -33,19 +33,25 @@ enum AppDesignSystem {
   iosLiquidGlass,
 
   /// Тёмный неоморфизм / Ambient Smart Home — 4-я дизайн-система
-  /// по спецификации `docs/design/smart_home_dashboard_design_spec.json`.
+  /// по спецификации `docs/design/thermostat_neon_design_spec.json`
+  /// (попиксельно снятой с референсов: круговой термостат с неоновой
+  /// дугой-крутилкой + сегментный переключатель Auto/Cool/Heat).
   ///
-  /// Характеристики (§ design_system спецификации):
-  ///   • Premium dark smart-home: фон #10141F, поверхности #202633,
-  ///     recessed-области #171D29.
-  ///   • Soft raised/recessed неоморфные поверхности: широкие мягкие
-  ///     верхне-левые подсветки + глубокие нижне-правые тени, без жёстких
-  ///     границ.
-  ///   • Крупные непрерывные радиусы: карточки 29px, hero 34px (§ shape_language).
-  ///   • Фиолетовая иллюминация активных контролов #A77BFF,
-  ///     бирюзовые индикаторы #43D5F4, зелёный статус #3ED6C1.
-  ///   • Тени: raised_card 0 12px 28px rgba(0,0,0,.34),
-  ///     inset well — recessed-углубления (§ reusable_tokens.shadow_recipes).
+  /// Характеристики (§ спецификации):
+  ///   • Фон страницы — радиальный градиент (свет сверху-слева):
+  ///     #31334A → #292C3B → #1F222C → #181B24.
+  ///   • Панели — приподнятая поверхность циферблата #20242F; контентная
+  ///     область — «желобок» #171B26; recessed-вставки #14171F.
+  ///   • Неоновый фиолетовый #926AF8 — акцент активных контролов;
+  ///     активная кнопка-капсула с вертикальным градиентом
+  ///     #C1A7FE → #A17BFC и ТЁМНЫМ текстом #180344 (как «Auto»);
+  ///     неактивные элементы — текст #A7ABBD без заливки.
+  ///   • Лавандовое свечение #DADAFB, бирюзовые индикаторы #51BFE5.
+  ///   • ВАЖНОЕ ПРАВИЛО (от заказчика): ПРЯМЫЕ ЛИНИИ НЕ СКРУГЛЯЮТСЯ —
+  ///     разделители, границы и треки-линии остаются острыми
+  ///     (BorderRadius.zero у линейных индикаторов); скругления —
+  ///     только у кнопок, карточек, панелей и других «объёмных»
+  ///     элементов.
   neumorphicSmartHome,
 }
 
@@ -420,26 +426,64 @@ class AppTheme {
   //  НЕОМОРФИЗМ · SMART HOME (4-я дизайн-система)
   // ─────────────────────────────────────────────────────────────────────
   //
-  //  По спецификации docs/design/smart_home_dashboard_design_spec.json
-  //  («Dark Soft-Neumorphism / Ambient Smart Home UI»).
+  //  По спецификации docs/design/thermostat_neon_design_spec.json
+  //  (попиксельный замер референсов «умного дома»).
   //
   //  Принципы:
   //    •Raised/recessed поверхности БЕЗ жёстких границ — глубина
-  //      создаётся широкими мягкими тенями и подсветками.
-  //    • Фиолетовый #A77BFF — акцент активных контролов; бирюзовый
-  //      #43D5F4 — индикаторы состояния; крупные радиусы 29–34px.
+  //      создаётся широкими мягкими тенями и подсветками (как у
+  //      циферблата: желобки, фаски, светящиеся кольца).
+  //    • Неоновый фиолетовый #926AF8 — акцент активных контролов;
+  //      активные кнопки — капсулы с вертикальным градиентом
+  //      #C1A7FE → #A17BFC и тёмным текстом #180344.
+  //    • ПРЯМЫЕ ЛИНИИ (разделители, границы, линейные индикаторы)
+  //      НЕ скругляются — скругления только у «объёмных» элементов:
+  //      кнопки, карточки, панели, поля, диалоги.
   //    • Тёмная версия — по спецификации; светлая — адаптация той же
   //      неоморфной системы (светлые поверхности + мягкие серые тени).
 
-  /// Палитра тёмной версии (§ color_palette спецификации).
-  static const Color _neuPageBackground = Color(0xFF10141F);
-  static const Color _neuSurfaceBase = Color(0xFF202633);
-  static const Color _neuSurfaceHighlight = Color(0xFF2B3444);
-  static const Color _neuSurfaceRecessed = Color(0xFF171D29);
-  static const Color _neuTextPrimary = Color(0xFFF1F3FA);
-  static const Color _neuTextSecondary = Color(0xFFA2AABC);
-  static const Color _neuViolet = Color(0xFFA77BFF);
-  static const Color _neuCyan = Color(0xFF43D5F4);
+  /// Палитра тёмной версии (§ палитра_общая / циферблат спецификации).
+  ///
+  /// Источник — попиксельный замер референсов (см.
+  /// docs/design/thermostat_neon_design_spec.json):
+  ///   • фон: радиальный градиент #31334A → #292C3B → #1F222C → #181B24
+  ///     (источник света сверху-слева, виньетка к низу-праву);
+  ///   • панели/карточки — приподнятая поверхность #20242F,
+  ///     блик-хребет #313443;
+  ///   • контентная область и «ванны» — желобок #171B26, глубокая
+  ///     recessed-вставка #14171F;
+  ///   • неоновое ядро #926AF8, кнопочный градиент #C1A7FE → #A17BFC,
+  ///     лаванда #DADAFB, бирюза #51BFE5.
+  static const Color _neuPageBackground = Color(0xFF181B24);
+  static const Color _neuPageBackgroundTopLeft = Color(0xFF31334A);
+  static const Color _neuPageBackgroundTop = Color(0xFF292C3B);
+  static const Color _neuPageBackgroundMid = Color(0xFF1F222C);
+  static const Color _neuSurfaceBase = Color(0xFF20242F);
+  static const Color _neuSurfaceHighlight = Color(0xFF313443);
+  static const Color _neuSurfaceRecessed = Color(0xFF14171F);
+  static const Color _neuContentWell = Color(0xFF171B26);
+  static const Color _neuTextPrimary = Color(0xFFFDFEFF);
+  static const Color _neuTextSecondary = Color(0xFFA7ABBD);
+  static const Color _neuViolet = Color(0xFF926AF8);
+  static const Color _neuVioletBright = Color(0xFFA17BFC);
+  static const Color _neuVioletLight = Color(0xFFC1A7FE);
+  static const Color _neuLavender = Color(0xFFDADAFB);
+  static const Color _neuOnAccent = Color(0xFF180344);
+  static const Color _neuCyan = Color(0xFF51BFE5);
+
+  /// Радиальный градиент фона страницы (§ палитра_общая:
+  /// «radial-gradient(120% 120% at 20% 0%, …)» спецификации).
+  static RadialGradient get _neuWallpaper => const RadialGradient(
+        center: Alignment(-0.6, -1.0), // ≈ 20% по горизонтали, 0% по вертикали
+        radius: 1.5,
+        colors: [
+          _neuPageBackgroundTopLeft, // #31334A
+          _neuPageBackgroundTop, //     #292C3B
+          _neuPageBackgroundMid, //     #1F222C
+          _neuPageBackground, //        #181B24
+        ],
+        stops: [0.0, 0.35, 0.65, 1.0],
+      );
 
   /// Палитра светлой версии (адаптация той же системы).
   static const Color _neuLightPageBackground = Color(0xFFE4E9F2);
@@ -485,15 +529,16 @@ class AppTheme {
     required Color textSecondary,
     required Color accent,
   }) {
+    final isDark = brightness == Brightness.dark;
     final scheme = ColorScheme(
       brightness: brightness,
       primary: accent,
-      onPrimary: brightness == Brightness.dark
-          ? Colors.white
-          : const Color(0xFF171226),
+      // Активная кнопка-капсула — светло-фиолетовый градиент с ТЁМНЫМ
+      // текстом (как «Auto» в референсе: #C1A7FE → #A17BFC + #180344).
+      onPrimary: _neuOnAccent,
       secondary: _neuCyan,
-      onSecondary: brightness == Brightness.dark
-          ? const Color(0xFF10141F)
+      onSecondary: isDark
+          ? const Color(0xFF0E2730)
           : const Color(0xFF0E3038),
       error: const Color(0xFFE5484D),
       onError: Colors.white,
@@ -508,21 +553,25 @@ class AppTheme {
       onSurfaceVariant: textSecondary,
       outline: textSecondary.withValues(alpha: 0.35),
       outlineVariant: textSecondary.withValues(alpha: 0.18),
-      primaryContainer: accent.withValues(alpha: 0.22),
-      onPrimaryContainer: brightness == Brightness.dark
-          ? const Color(0xFFD2B8FF)
+      primaryContainer: _neuVioletBright.withValues(alpha: 0.24),
+      onPrimaryContainer: isDark
+          ? _neuLavender // #DADAFB — лавандовое свечение из референса
           : const Color(0xFF4C2E92),
       secondaryContainer: _neuCyan.withValues(alpha: 0.20),
-      onSecondaryContainer: brightness == Brightness.dark
-          ? const Color(0xFF64D9E8)
+      onSecondaryContainer: isDark
+          ? const Color(0xFF7FD4E8)
           : const Color(0xFF0B4C57),
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      // Страница — фон спецификации (#10141F), без wallpaper-градиента.
-      scaffoldBackgroundColor: pageBackground,
+      // Тёмная версия: scaffold ПРОЗРАЧНЫЙ — под ним виден радиальный
+      // градиент-«обои» (_neuWallpaper: #31334A → #292C3B → #1F222C →
+      // #181B24, свет сверху-слева), рисуемый FrostedScaffoldBackground.
+      // Светлая версия: плоский светлый фон без обоев.
+      scaffoldBackgroundColor:
+          isDark ? Colors.transparent : pageBackground,
       appBarTheme: AppBarTheme(
         // AppBar прозрачный: стекло шапки рисует MainScreen
         // через flexibleSpace (ColoredBox поверх panelColors.panel).
@@ -540,7 +589,8 @@ class AppTheme {
           fontFamilyFallback: const ['SF Pro Display', 'Segoe UI', 'Roboto'],
         ),
       ),
-      // Карточки — крупные радиусы 29px (§ shape_language.card_radius_px).
+      // Карточки — крупные радиусы 29px (§ циферблат: приподнятая
+      // поверхность #20242F, как тело циферблата).
       cardTheme: CardThemeData(
         elevation: 0,
         margin: EdgeInsets.zero,
@@ -604,48 +654,86 @@ class AppTheme {
           borderRadius: BorderRadius.circular(24),
         ),
       ),
-      // Кнопки — фиолетовый акцент активных контролов.
+      // Кнопки — активный контрол из референса: светло-фиолетовая
+      // капсула (#A17BFC — середина градиента #C1A7FE → #A17BFC) с
+      // ТЁМНЫМ текстом #180344 и мягким фиолетовым свечением.
+      // (Полный вертикальный градиент накладывается в сегментных
+      // переключателях — см. _SegmentRow в main_screen.dart; на
+      // уровне темы берём плоский безопасный аналог середины градиента.)
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: accent,
-          foregroundColor: brightness == Brightness.dark
-              ? Colors.white
-              : const Color(0xFF171226),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(999),
-          ),
+          backgroundColor: _neuVioletBright,
+          foregroundColor: _neuOnAccent,
+          // Мягкое неоновое свечение вокруг активной капсулы
+          // (§ css_рецепты: box-shadow 0 0 … rgba(146,106,248,.45)).
+          elevation: 2,
+          shadowColor: _neuViolet.withValues(alpha: 0.45),
+          surfaceTintColor: Colors.transparent,
+          // Hover — осветление к верхнему тону градиента (#C1A7FE).
+          overlayColor: _neuVioletLight.withValues(alpha: 0.22),
+          shape: const StadiumBorder(), // капсула — только для «объёмных» элементов
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: brightness == Brightness.dark
-              ? const Color(0xFFD2B8FF)
-              : const Color(0xFF6845C7),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(999),
-          ),
+          // Неактивные подписи-кнопки — лаванда/серый текст без заливки
+          // (как «Cool»/«Heat» в референсе).
+          foregroundColor: isDark ? _neuLavender : const Color(0xFF6845C7),
+          shape: const StadiumBorder(),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: textPrimary,
           side: BorderSide(color: textSecondary.withValues(alpha: 0.35)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(999),
-          ),
+          shape: const StadiumBorder(),
         ),
       ),
       cardColor: surfaceBase,
-      // Chip-ы — pill, выделение фиолетовым свечением (§ lighting).
+      // Chip-ы — сегмент-контрол из референса: капсула-вставка, выбранная
+      // — фиолетовая капсула с тёмным текстом, невыбранная — прозрачная
+      // с серо-лавандовым текстом #A7ABBD.
       chipTheme: ChipThemeData(
         backgroundColor: surfaceRecessed,
         side: BorderSide.none,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(999),
-        ),
-        labelStyle: TextStyle(color: textPrimary, fontSize: 13),
-        selectedColor: accent.withValues(alpha: 0.28),
-        checkmarkColor: accent,
+        shape: const StadiumBorder(),
+        labelStyle: TextStyle(color: textSecondary, fontSize: 13),
+        selectedColor: _neuVioletBright,
+        checkmarkColor: _neuOnAccent,
+        secondaryLabelStyle: TextStyle(color: _neuOnAccent, fontSize: 13),
+      ),
+      // Переключатели (Switch) — неоновая дорожка #A17BFC в активном
+      // состоянии, recessed-дорожка с серым ползунком в неактивном.
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return isDark ? _neuTextPrimary : Colors.white;
+          }
+          return textSecondary;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return _neuVioletBright;
+          }
+          return surfaceRecessed;
+        }),
+        trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+      ),
+      // Слайдеры — неоновая фиолетовая активная дорожка (§ неоновая дуга
+      // спецификации) на recessed-треке.
+      sliderTheme: SliderThemeData(
+        activeTrackColor: _neuViolet,
+        inactiveTrackColor: surfaceHighlight,
+        thumbColor: isDark ? _neuTextPrimary : Colors.white,
+        overlayColor: _neuViolet.withValues(alpha: 0.16),
+        valueIndicatorColor: surfaceBase,
+      ),
+      // ПРЯМЫЕ ЛИНИИ НЕ СКРУГЛЯЮТСЯ (правило заказчика): прогресс-бар —
+      // строго прямоугольная линия без радиусов; Divider — острый.
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: _neuViolet,
+        linearTrackColor: surfaceHighlight,
+        borderRadius: BorderRadius.zero,
       ),
       dividerTheme: DividerThemeData(
         color: textSecondary.withValues(alpha: 0.16),
@@ -654,15 +742,17 @@ class AppTheme {
       ),
       extensions: [
         PanelColors(
-          // Боковые панели — базовая поверхность (#202633).
+          // Боковые панели — приподнятая поверхность циферблата (#20242F).
           panel: surfaceBase,
-          // Контентная область — «углубление» (#171D29): сетка файлов
-          // лежит в recessed-пространстве, карточки на нём приподняты.
-          contentBackground: surfaceRecessed,
+          // Контентная область — «желобок» (#171B26): сетка файлов лежит
+          // в углублении, карточки на нём приподняты (§ слои спецификации).
+          contentBackground: isDark ? _neuContentWell : surfaceRecessed,
         ),
-        const _DesignSystemExtension(
+        _DesignSystemExtension(
           design: AppDesignSystem.neumorphicSmartHome,
-          wallpaper: null,
+          // Тёмная версия — радиальный градиент фона из спецификации;
+          // светлая — плоский фон (обои не нужны).
+          wallpaper: isDark ? _neuWallpaper : null,
           blurSigma: 0,
           blurEnabled: false,
         ),
@@ -936,16 +1026,16 @@ extension PanelColorsX on BuildContext {
     final isDark = Theme.of(this).brightness == Brightness.dark;
     if (designSystem == AppDesignSystem.neumorphicSmartHome) {
       return IconButton.styleFrom(
+        // Приподнятая поверхность (§ циферблат: тело #20242F / блик #313443),
+        // круглая капсула — скругление только у «объёмных» элементов.
         backgroundColor:
-            isDark ? const Color(0xFF2B3444) : const Color(0xFFF6F8FC),
+            isDark ? const Color(0xFF242A38) : const Color(0xFFF6F8FC),
         foregroundColor:
-            isDark ? const Color(0xFFF1F3FA) : const Color(0xFF1D2430),
+            isDark ? const Color(0xFFFDFEFF) : const Color(0xFF1D2430),
         hoverColor: isDark
             ? Colors.white.withValues(alpha: 0.08)
             : Colors.black.withValues(alpha: 0.05),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(14)),
-        ),
+        shape: const StadiumBorder(),
       );
     }
     return IconButton.styleFrom(
