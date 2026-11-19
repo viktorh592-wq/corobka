@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../data/models/folder.dart';
 import '../features/collection/collection_state.dart';
 import 'app_dialog.dart';
+import 'file_drag.dart';
 import 'folder_color_dialog.dart';
 import 'folder_icon.dart';
 import 'glass_popup_menu.dart';
@@ -39,8 +40,7 @@ class _LeftPanelState extends State<LeftPanel> {
   bool _folderSearchVisible = false;
 
   /// Контроллер поля поиска по папкам.
-  final TextEditingController _folderSearchController =
-      TextEditingController();
+  final TextEditingController _folderSearchController = TextEditingController();
 
   @override
   void dispose() {
@@ -264,15 +264,13 @@ Future<String?> _showFolderNameDialog({
         EdgeInsets insetPadding = const EdgeInsets.all(24);
         if (anchorKey != null) {
           final anchorContext = anchorKey.currentContext;
-          final overlay =
-              Overlay.of(dialogContext).context.findRenderObject();
+          final overlay = Overlay.of(dialogContext).context.findRenderObject();
           if (anchorContext != null &&
               overlay is RenderBox &&
               anchorContext.findRenderObject() is RenderBox) {
             final box = anchorContext.findRenderObject() as RenderBox;
             if (box.attached && overlay.attached) {
-              final topLeft =
-                  box.localToGlobal(Offset.zero, ancestor: overlay);
+              final topLeft = box.localToGlobal(Offset.zero, ancestor: overlay);
               final bottomLeft = topLeft + Offset(0, box.size.height);
               insetPadding = EdgeInsets.only(
                 left: math.max(8.0, topLeft.dx - 4),
@@ -369,8 +367,7 @@ class _FolderNameCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
-                    onPressed: () =>
-                        Navigator.of(context).pop(controller.text),
+                    onPressed: () => Navigator.of(context).pop(controller.text),
                     child: Text(confirmLabel),
                   ),
                 ],
@@ -428,10 +425,10 @@ class _TagsSectionState extends State<_TagsSection> {
                         color: Theme.of(context).colorScheme.outline,
                       ),
                 ),
-            Icon(
-              _expanded ? Icons.expand_less : Icons.expand_more,
-              size: 20,
-            ),
+              Icon(
+                _expanded ? Icons.expand_less : Icons.expand_more,
+                size: 20,
+              ),
             ],
           ),
           onTap: () {
@@ -556,7 +553,8 @@ class _SystemTile extends StatelessWidget {
     final tile = ListTile(
       dense: true,
       // Иконки в акцентном цвете элементов управления — единый стиль UI.
-      leading: Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+      leading:
+          Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
       title: Text(
         label,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -579,26 +577,13 @@ class _SystemTile extends StatelessWidget {
 
     if (!isRootTarget) return tile;
 
-    return DragTarget<List<int>>(
-      onWillAcceptWithDetails: (details) => true,
-      onAcceptWithDetails: (details) => state.moveItemsToFolder(
-        details.data,
-        null,
-      ),
-      builder: (context, candidate, _) {
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: candidate.isNotEmpty
-                  ? Theme.of(context).colorScheme.primary
-                  : Colors.transparent,
-              width: 2,
-            ),
-          ),
-          child: tile,
-        );
-      },
+    // Раздел «Все» — приёмник перетаскивания (перемещение в корень
+    // и импорт файлов из Проводника в корень коллекции).
+    return FolderDropRegion(
+      accept: true,
+      onMoveItems: (ids) => state.moveItemsToFolder(ids, null),
+      onImportFiles: (paths) => state.importController.importPaths(paths),
+      child: tile,
     );
   }
 }
@@ -649,107 +634,82 @@ class _FolderTileState extends State<_FolderTile> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Сама плитка папки: принимает перетаскиваемые элементы
-        // (одиночные или массовое выделение) и открывает меню у курсора.
+        // (одиночные или массовое выделение) и файлы из Проводника,
+        // открывает меню у курсора.
         GestureDetector(
           onSecondaryTapUp: (details) =>
               _showMenu(context, state, details.globalPosition),
           onLongPressStart: (details) =>
               _showMenu(context, state, details.globalPosition),
-          child: DragTarget<List<int>>(
-            onWillAcceptWithDetails: (details) => !state.isTrashView,
-            onAcceptWithDetails: (details) =>
-                state.moveItemsToFolder(details.data, widget.folder.id),
-            builder: (context, candidate, _) {
-              final active = candidate.isNotEmpty;
-              return Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  // Подсветка папки — сюда можно бросить выделенные файлы.
-                  color: active
-                      ? Theme.of(context)
-                          .colorScheme
-                          .primaryContainer
-                          .withValues(alpha: 0.55)
-                      : null,
-                  border: Border.all(
-                    color: active
-                        ? Theme.of(context).colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.only(left: widget.level * 12.0),
-                  child: ListTile(
-                    dense: true,
-                    leading: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Шеврон раскрытия: виден только если есть дочерние папки.
-                        if (hasChildren)
-                          InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () =>
-                                setState(() => _expanded = !_expanded),
-                            child: Padding(
-                              padding: const EdgeInsets.all(2),
-                              child: Icon(
-                                expanded
-                                    ? Icons.expand_more
-                                    : Icons.chevron_right,
-                                size: 18,
-                              ),
-                            ),
-                          )
-                        else
-                          const SizedBox(width: 22),
-                        // Иконка папки: цветная (если задана настройка цвета)
-                        // либо стандартная — в акцентном цвете элементов.
-                        FolderIcon(
-                          colorHex: widget.folder.color,
-                          size: 20,
-                        ),
-                      ],
-                    ),
-                    title: Text(
-                      widget.folder.name,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // «+» напротив каждой папки — быстрое создание подпапки.
-                        IconButton(
-                          key: _addSubfolderButtonKey,
-                          tooltip: 'Добавить подпапку',
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.all(4),
-                          constraints: const BoxConstraints(
-                              minWidth: 26, minHeight: 26),
-                          icon: const Icon(Icons.add, size: 18),
-                          onPressed: () => _addSubfolder(context, state),
-                        ),
-                        if (count != null && count > 0)
-                          Text(
-                            '$count',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(context).colorScheme.outline,
-                                ),
+          child: FolderDropRegion(
+            accept: !state.isTrashView,
+            onMoveItems: (ids) =>
+                state.moveItemsToFolder(ids, widget.folder.id),
+            onImportFiles: (paths) => state.importController
+                .importPaths(paths, folderId: widget.folder.id),
+            child: Padding(
+              padding: EdgeInsets.only(left: widget.level * 12.0),
+              child: ListTile(
+                dense: true,
+                leading: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Шеврон раскрытия: виден только если есть дочерние папки.
+                    if (hasChildren)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => setState(() => _expanded = !_expanded),
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            expanded ? Icons.expand_more : Icons.chevron_right,
+                            size: 18,
                           ),
-                      ],
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 22),
+                    // Иконка папки: цветная (если задана настройка цвета)
+                    // либо стандартная — в акцентном цвете элементов.
+                    FolderIcon(
+                      colorHex: widget.folder.color,
+                      size: 20,
                     ),
-                    selected: selected,
-                    selectedTileColor:
-                        Theme.of(context).colorScheme.secondaryContainer,
-                    onTap: () =>
-                        state.selectFolder(widget.folder.id.toString()),
-                  ),
+                  ],
                 ),
-              );
-            },
+                title: Text(
+                  widget.folder.name,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // «+» напротив каждой папки — быстрое создание подпапки.
+                    IconButton(
+                      key: _addSubfolderButtonKey,
+                      tooltip: 'Добавить подпапку',
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.all(4),
+                      constraints:
+                          const BoxConstraints(minWidth: 26, minHeight: 26),
+                      icon: const Icon(Icons.add, size: 18),
+                      onPressed: () => _addSubfolder(context, state),
+                    ),
+                    if (count != null && count > 0)
+                      Text(
+                        '$count',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.outline,
+                            ),
+                      ),
+                  ],
+                ),
+                selected: selected,
+                selectedTileColor:
+                    Theme.of(context).colorScheme.secondaryContainer,
+                onTap: () => state.selectFolder(widget.folder.id.toString()),
+              ),
+            ),
           ),
         ),
         // Дочерние подпапки (рекурсивно). Во время поиска — автоматически
@@ -897,7 +857,8 @@ class _FolderTileState extends State<_FolderTile> {
     // null — отмена (крестик); '' — сброс на стандартный цвет;
     // иначе HEX-строка выбранного цвета.
     if (result == null) return;
-    await state.setFolderColor(widget.folder.id, result.isEmpty ? null : result);
+    await state.setFolderColor(
+        widget.folder.id, result.isEmpty ? null : result);
   }
 
   Future<void> _renameDialog(

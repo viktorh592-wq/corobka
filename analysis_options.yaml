@@ -1,6 +1,12 @@
 analyzer:
   exclude:
     - build/**
+  errors:
+    # Flutter 3.50 пометил package:flutter/material.dart как deprecated
+    # (рекомендуется package:material_ui), который ещё не используется.
+    # Подавляем, чтобы flutter analyze (--fatal-infos) проходил и на
+    # новых, и на старых версиях SDK.
+    deprecated_member_use: ignore
 include: package:flutter_lints/flutter.yaml
 
 linter:

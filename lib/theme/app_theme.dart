@@ -31,11 +31,27 @@ enum AppDesignSystem {
   ///   • Тема-переключатель — отдельный виджет со скользящим knob-ом
   ///     (см. `LiquidGlassThemeToggle`).
   iosLiquidGlass,
+
+  /// Тёмный неоморфизм / Ambient Smart Home — 4-я дизайн-система
+  /// по спецификации `docs/design/smart_home_dashboard_design_spec.json`.
+  ///
+  /// Характеристики (§ design_system спецификации):
+  ///   • Premium dark smart-home: фон #10141F, поверхности #202633,
+  ///     recessed-области #171D29.
+  ///   • Soft raised/recessed неоморфные поверхности: широкие мягкие
+  ///     верхне-левые подсветки + глубокие нижне-правые тени, без жёстких
+  ///     границ.
+  ///   • Крупные непрерывные радиусы: карточки 29px, hero 34px (§ shape_language).
+  ///   • Фиолетовая иллюминация активных контролов #A77BFF,
+  ///     бирюзовые индикаторы #43D5F4, зелёный статус #3ED6C1.
+  ///   • Тени: raised_card 0 12px 28px rgba(0,0,0,.34),
+  ///     inset well — recessed-углубления (§ reusable_tokens.shadow_recipes).
+  neumorphicSmartHome,
 }
 
 /// Настройки тем приложения «коробка».
 ///
-/// Предоставляет 6 тем (3 дизайн-системы × 2 яркости), а также фоновые цвета
+/// Предоставляет 8 тем (4 дизайн-системы × 2 яркости), а также фоновые цвета
 /// панелей, имитирующие оформление Eagle для Material и iOS-стиль — для двух
 /// остальных.
 class AppTheme {
@@ -65,6 +81,8 @@ class AppTheme {
         return isDark ? _iosTransparentDark : _iosTransparentLight;
       case AppDesignSystem.iosLiquidGlass:
         return isDark ? _iosLiquidGlassDark : _iosLiquidGlassLight;
+      case AppDesignSystem.neumorphicSmartHome:
+        return isDark ? _neumorphicSmartHomeDark : _neumorphicSmartHomeLight;
     }
   }
 
@@ -398,6 +416,260 @@ class AppTheme {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────
+  //  НЕОМОРФИЗМ · SMART HOME (4-я дизайн-система)
+  // ─────────────────────────────────────────────────────────────────────
+  //
+  //  По спецификации docs/design/smart_home_dashboard_design_spec.json
+  //  («Dark Soft-Neumorphism / Ambient Smart Home UI»).
+  //
+  //  Принципы:
+  //    •Raised/recessed поверхности БЕЗ жёстких границ — глубина
+  //      создаётся широкими мягкими тенями и подсветками.
+  //    • Фиолетовый #A77BFF — акцент активных контролов; бирюзовый
+  //      #43D5F4 — индикаторы состояния; крупные радиусы 29–34px.
+  //    • Тёмная версия — по спецификации; светлая — адаптация той же
+  //      неоморфной системы (светлые поверхности + мягкие серые тени).
+
+  /// Палитра тёмной версии (§ color_palette спецификации).
+  static const Color _neuPageBackground = Color(0xFF10141F);
+  static const Color _neuSurfaceBase = Color(0xFF202633);
+  static const Color _neuSurfaceHighlight = Color(0xFF2B3444);
+  static const Color _neuSurfaceRecessed = Color(0xFF171D29);
+  static const Color _neuTextPrimary = Color(0xFFF1F3FA);
+  static const Color _neuTextSecondary = Color(0xFFA2AABC);
+  static const Color _neuViolet = Color(0xFFA77BFF);
+  static const Color _neuCyan = Color(0xFF43D5F4);
+
+  /// Палитра светлой версии (адаптация той же системы).
+  static const Color _neuLightPageBackground = Color(0xFFE4E9F2);
+  static const Color _neuLightSurfaceBase = Color(0xFFEAEFF7);
+  static const Color _neuLightSurfaceHighlight = Color(0xFFF6F8FC);
+  static const Color _neuLightSurfaceRecessed = Color(0xFFD8DEE9);
+  static const Color _neuLightTextPrimary = Color(0xFF1D2430);
+  static const Color _neuLightTextSecondary = Color(0xFF5A6478);
+
+  static ThemeData get _neumorphicSmartHomeDark {
+    return _buildNeumorphic(
+      brightness: Brightness.dark,
+      pageBackground: _neuPageBackground,
+      surfaceBase: _neuSurfaceBase,
+      surfaceHighlight: _neuSurfaceHighlight,
+      surfaceRecessed: _neuSurfaceRecessed,
+      textPrimary: _neuTextPrimary,
+      textSecondary: _neuTextSecondary,
+      accent: _neuViolet,
+    );
+  }
+
+  static ThemeData get _neumorphicSmartHomeLight {
+    return _buildNeumorphic(
+      brightness: Brightness.light,
+      pageBackground: _neuLightPageBackground,
+      surfaceBase: _neuLightSurfaceBase,
+      surfaceHighlight: _neuLightSurfaceHighlight,
+      surfaceRecessed: _neuLightSurfaceRecessed,
+      textPrimary: _neuLightTextPrimary,
+      textSecondary: _neuLightTextSecondary,
+      accent: _neuViolet,
+    );
+  }
+
+  static ThemeData _buildNeumorphic({
+    required Brightness brightness,
+    required Color pageBackground,
+    required Color surfaceBase,
+    required Color surfaceHighlight,
+    required Color surfaceRecessed,
+    required Color textPrimary,
+    required Color textSecondary,
+    required Color accent,
+  }) {
+    final scheme = ColorScheme(
+      brightness: brightness,
+      primary: accent,
+      onPrimary: brightness == Brightness.dark
+          ? Colors.white
+          : const Color(0xFF171226),
+      secondary: _neuCyan,
+      onSecondary: brightness == Brightness.dark
+          ? const Color(0xFF10141F)
+          : const Color(0xFF0E3038),
+      error: const Color(0xFFE5484D),
+      onError: Colors.white,
+      // Фоновые поверхности — неоморфные, без M3-тонирования.
+      surface: surfaceBase,
+      onSurface: textPrimary,
+      surfaceContainerHighest: surfaceHighlight,
+      surfaceContainerHigh: surfaceHighlight,
+      surfaceContainer: surfaceBase,
+      surfaceContainerLow: surfaceBase,
+      surfaceContainerLowest: surfaceRecessed,
+      onSurfaceVariant: textSecondary,
+      outline: textSecondary.withValues(alpha: 0.35),
+      outlineVariant: textSecondary.withValues(alpha: 0.18),
+      primaryContainer: accent.withValues(alpha: 0.22),
+      onPrimaryContainer: brightness == Brightness.dark
+          ? const Color(0xFFD2B8FF)
+          : const Color(0xFF4C2E92),
+      secondaryContainer: _neuCyan.withValues(alpha: 0.20),
+      onSecondaryContainer: brightness == Brightness.dark
+          ? const Color(0xFF64D9E8)
+          : const Color(0xFF0B4C57),
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: scheme,
+      // Страница — фон спецификации (#10141F), без wallpaper-градиента.
+      scaffoldBackgroundColor: pageBackground,
+      appBarTheme: AppBarTheme(
+        // AppBar прозрачный: стекло шапки рисует MainScreen
+        // через flexibleSpace (ColoredBox поверх panelColors.panel).
+        backgroundColor: Colors.transparent,
+        foregroundColor: textPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        centerTitle: false,
+        titleTextStyle: TextStyle(
+          color: textPrimary,
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'Inter',
+          fontFamilyFallback: const ['SF Pro Display', 'Segoe UI', 'Roboto'],
+        ),
+      ),
+      // Карточки — крупные радиусы 29px (§ shape_language.card_radius_px).
+      cardTheme: CardThemeData(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        color: surfaceBase,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(29),
+        ),
+      ),
+      // Текстовые поля — recessed-«углубления» без рамок.
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surfaceRecessed,
+        hintStyle: TextStyle(color: textSecondary.withValues(alpha: 0.7)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: accent.withValues(alpha: 0.6)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
+      ),
+      // Диалоги — приподнятые неоморфные панели.
+      dialogTheme: DialogThemeData(
+        backgroundColor: surfaceBase,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+      ),
+      // Контекстные меню — приподнятые поверхности, крупный радиус.
+      popupMenuTheme: PopupMenuThemeData(
+        color: surfaceBase,
+        elevation: 12,
+        shadowColor: Colors.black.withValues(alpha: 0.34),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+      ),
+      // SnackBar — плавающая «пилюля».
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: surfaceHighlight,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surfaceBase,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+      ),
+      // Кнопки — фиолетовый акцент активных контролов.
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: accent,
+          foregroundColor: brightness == Brightness.dark
+              ? Colors.white
+              : const Color(0xFF171226),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: brightness == Brightness.dark
+              ? const Color(0xFFD2B8FF)
+              : const Color(0xFF6845C7),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: textPrimary,
+          side: BorderSide(color: textSecondary.withValues(alpha: 0.35)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+      ),
+      cardColor: surfaceBase,
+      // Chip-ы — pill, выделение фиолетовым свечением (§ lighting).
+      chipTheme: ChipThemeData(
+        backgroundColor: surfaceRecessed,
+        side: BorderSide.none,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(999),
+        ),
+        labelStyle: TextStyle(color: textPrimary, fontSize: 13),
+        selectedColor: accent.withValues(alpha: 0.28),
+        checkmarkColor: accent,
+      ),
+      dividerTheme: DividerThemeData(
+        color: textSecondary.withValues(alpha: 0.16),
+        thickness: 0.5,
+        space: 1,
+      ),
+      extensions: [
+        PanelColors(
+          // Боковые панели — базовая поверхность (#202633).
+          panel: surfaceBase,
+          // Контентная область — «углубление» (#171D29): сетка файлов
+          // лежит в recessed-пространстве, карточки на нём приподняты.
+          contentBackground: surfaceRecessed,
+        ),
+        const _DesignSystemExtension(
+          design: AppDesignSystem.neumorphicSmartHome,
+          wallpaper: null,
+          blurSigma: 0,
+          blurEnabled: false,
+        ),
+      ],
+    );
+  }
+
   static ThemeData _buildIos({
     required ColorScheme scheme,
     required Brightness brightness,
@@ -525,8 +797,7 @@ class AppTheme {
 /// Используется [FrostedPanel] для решения, нужен ли [BackdropFilter]
 /// и какая интенсивность размытия. [wallpaper] рисуется под scaffold-ом
 /// в [FrostedScaffoldBackground].
-class _DesignSystemExtension
-    extends ThemeExtension<_DesignSystemExtension> {
+class _DesignSystemExtension extends ThemeExtension<_DesignSystemExtension> {
   const _DesignSystemExtension({
     required this.design,
     this.wallpaper,
@@ -652,6 +923,9 @@ extension PanelColorsX on BuildContext {
   /// Для [AppDesignSystem.iosLiquidGlass] используется централизованный
   /// стиль из [liquidGlassIconButtonStyle] (capsule glass с subtle edge,
   /// hover/pressed states — см. гайдлайн §9 BUTTON SYSTEM).
+  ///
+  /// Для [AppDesignSystem.neumorphicSmartHome] — «приподнятая» тёмная
+  /// поверхность (#2B3444) с мягкой формой, без рамок (§ surface_treatment).
   ButtonStyle? get glassIconButtonStyle {
     if (designSystem == AppDesignSystem.material) return null;
     if (designSystem == AppDesignSystem.iosLiquidGlass) {
@@ -660,6 +934,20 @@ extension PanelColorsX on BuildContext {
       );
     }
     final isDark = Theme.of(this).brightness == Brightness.dark;
+    if (designSystem == AppDesignSystem.neumorphicSmartHome) {
+      return IconButton.styleFrom(
+        backgroundColor:
+            isDark ? const Color(0xFF2B3444) : const Color(0xFFF6F8FC),
+        foregroundColor:
+            isDark ? const Color(0xFFF1F3FA) : const Color(0xFF1D2430),
+        hoverColor: isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.05),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+      );
+    }
     return IconButton.styleFrom(
       backgroundColor: isDark
           ? Colors.white.withValues(alpha: 0.10)
@@ -724,7 +1012,9 @@ class FrostedPanel extends StatelessWidget {
       child: child,
     );
 
-    if (isGlass && context.backdropBlurEnabled && context.backdropBlurSigma > 0) {
+    if (isGlass &&
+        context.backdropBlurEnabled &&
+        context.backdropBlurSigma > 0) {
       // iOS Frosted: blur «за» полупрозрачной панелью.
       panel = BackdropFilter(
         filter: ImageFilter.blur(
@@ -755,9 +1045,8 @@ class FrostedPanel extends StatelessWidget {
       panel = Container(
         foregroundDecoration: BoxDecoration(
           border: border,
-          borderRadius: borderRadius > 0
-              ? BorderRadius.circular(borderRadius)
-              : null,
+          borderRadius:
+              borderRadius > 0 ? BorderRadius.circular(borderRadius) : null,
         ),
         child: panel,
       );

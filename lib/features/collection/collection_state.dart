@@ -9,6 +9,7 @@ import '../../data/models/folder.dart';
 import '../../data/models/item.dart';
 import '../../data/models/tag.dart';
 import '../../data/settings_repository.dart';
+import '../files/file_transfer_service.dart';
 import '../images/export_service.dart';
 import '../images/import_controller.dart';
 import '../images/video_thumbnail_service.dart';
@@ -262,7 +263,8 @@ class CollectionState extends ChangeNotifier {
       _videoThumbnails
         ..clear()
         ..addAll(_items
-            .where((i) => i.isVideo && known.contains(_service.thumbnailPathFor(i.path)))
+            .where((i) =>
+                i.isVideo && known.contains(_service.thumbnailPathFor(i.path)))
             .map((i) => i.path));
     } catch (e) {
       debugPrint('loadVideoThumbnails error: $e');
@@ -559,8 +561,7 @@ class CollectionState extends ChangeNotifier {
         _multiSelectedIds
           ..clear()
           ..addAll([
-            for (var i = math.min(a, b); i <= math.max(a, b); i++)
-              _items[i].id,
+            for (var i = math.min(a, b); i <= math.max(a, b); i++) _items[i].id,
           ]);
         notifyListeners();
       }
@@ -606,8 +607,8 @@ class CollectionState extends ChangeNotifier {
     _multiSelectedIds.clear();
     _multiSelectAnchorId = null;
     if (_selectedItem != null && ids.contains(_selectedItem!.id)) {
-      _selectedItem =
-          _selectedItem!.copyWith(folderId: folderId, clearFolderId: folderId == null);
+      _selectedItem = _selectedItem!
+          .copyWith(folderId: folderId, clearFolderId: folderId == null);
     }
     await _loadItemsAndNotify();
   }
@@ -802,7 +803,8 @@ class CollectionState extends ChangeNotifier {
     if (item == null) return;
 
     await _service.moveItemToFolder(item.id, folderId);
-    _selectedItem = item.copyWith(folderId: folderId, clearFolderId: folderId == null);
+    _selectedItem =
+        item.copyWith(folderId: folderId, clearFolderId: folderId == null);
     notifyListeners();
     await _loadItemsAndNotify();
   }
@@ -1050,6 +1052,58 @@ class CollectionState extends ChangeNotifier {
     } catch (e) {
       _lastError = 'Не удалось открыть файл: $e';
       notifyListeners();
+    }
+  }
+
+  // ─────────────────────────── ПЕРЕДАЧА ФАЙЛОВ ───────────────────────────
+
+  static const FileTransferService _fileTransfer = FileTransferService();
+
+  /// Элементы коллекции по списку идентификаторов (в порядке списка).
+  List<CollectionItem> itemsByIds(List<int> ids) {
+    final byId = {for (final i in _items) i.id: i};
+    return [
+      for (final id in ids)
+        if (byId[id] != null) byId[id]!
+    ];
+  }
+
+  /// Скачивание файлов в системную папку «Загрузки».
+  ///
+  /// Возвращает результат или `null`, если файлов нет / произошла ошибка
+  /// (ошибка при этом попадает в [lastError] для показа пользователю).
+  Future<TransferResult?> downloadItems(List<CollectionItem> items) async {
+    if (items.isEmpty) return null;
+    try {
+      final result = await _fileTransfer
+          .downloadToDownloads(items.map((e) => e.path).toList());
+      LogService.instance.add(
+        'INFO',
+        'Скачано в «Загрузки»: ${result.exported}, ошибок: ${result.failed}',
+      );
+      return result;
+    } catch (e) {
+      _lastError = 'Не удалось скачать файлы: $e';
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// Открытие папки с файлом в Проводнике с выделением файла.
+  ///
+  /// Возвращает true при успехе.
+  Future<bool> revealItemInFolder(CollectionItem item) async {
+    try {
+      await _fileTransfer.revealInFileManager(item.path);
+      LogService.instance.add(
+        'INFO',
+        'Открыта папка с файлом: ${item.path}',
+      );
+      return true;
+    } catch (e) {
+      _lastError = 'Не удалось открыть папку: $e';
+      notifyListeners();
+      return false;
     }
   }
 

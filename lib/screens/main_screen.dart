@@ -251,9 +251,7 @@ class _MainScreenState extends State<MainScreen> {
   void _toggleTheme(BuildContext context) {
     final theme = context.read<ThemeProvider>();
     theme.setMode(
-      theme.mode == AppThemeMode.dark
-          ? AppThemeMode.light
-          : AppThemeMode.dark,
+      theme.mode == AppThemeMode.dark ? AppThemeMode.light : AppThemeMode.dark,
     );
   }
 
@@ -305,8 +303,7 @@ class _MainScreenState extends State<MainScreen> {
             icon: const Icon(Icons.folder_open_outlined, size: 18),
             label: const Text('Выбрать каталог'),
             onPressed: () async {
-              final picked =
-                  await state.collectionService.pickRootDirectory();
+              final picked = await state.collectionService.pickRootDirectory();
               if (picked == null) return;
               await state.changeRootPath(picked);
               if (dialogContext.mounted) {
@@ -344,10 +341,13 @@ class _DesignSystemSection extends StatelessWidget {
           'Дизайн-система интерфейса. Material — классический M3-стиль, '
           'iOS Transparent — полупрозрачные панели без размытия, '
           'iOS 27 · Liquid Glass — функциональное стекло (тулбар, поиск, '
-          'диалоги) с капсульными радиусами и мягкими тенями.',
+          'диалоги) с капсульными радиусами и мягкими тенями, '
+          'Неоморфизм · Smart Home — тёмный soft-neumorphism по '
+          'спецификации smart_home_dashboard_design_spec.json '
+          '(фон #10141F, поверхности #202633, фиолетовый акцент #A77BFF).',
         ),
         const SizedBox(height: 8),
-        // Сегментный контрол дизайн-системы (3 варианта).
+        // Сегментный контрол дизайн-системы (4 варианта).
         Wrap(
           spacing: 8,
           runSpacing: 6,
@@ -401,6 +401,8 @@ class _DesignSystemSection extends StatelessWidget {
         return 'iOS · прозрачная';
       case AppDesignSystem.iosLiquidGlass:
         return 'iOS 27 · Liquid Glass';
+      case AppDesignSystem.neumorphicSmartHome:
+        return 'Неоморфизм · Smart Home';
     }
   }
 }

@@ -13,6 +13,7 @@ import 'app_dialog.dart';
 import 'color_sliders.dart';
 import 'duplicates_dialog.dart';
 import 'drop_zone.dart';
+import 'file_drag.dart';
 import 'folder_icon.dart';
 import 'glass_popup_menu.dart';
 import 'lightbox_viewer.dart';
@@ -128,8 +129,7 @@ class _ToolbarState extends State<_Toolbar> {
   Future<void> _pickSortMode(BuildContext context) async {
     final state = widget.state;
     final buttonBox = _sortButtonKey.currentContext?.findRenderObject();
-    final overlayBox =
-        Overlay.of(context).context.findRenderObject();
+    final overlayBox = Overlay.of(context).context.findRenderObject();
 
     RelativeRect position = RelativeRect.fill;
     if (buttonBox is RenderBox && overlayBox is RenderBox) {
@@ -221,14 +221,14 @@ class _ToolbarState extends State<_Toolbar> {
                   ),
                   child: Row(
                     children: [
-                        // Поле поиска: capsule-форма (radius = capsule),
-                        // длина увеличена на 20% (280 → 336) согласно
-                        // гайдлайну COROBKA_iOS27 §18 «SEARCH FIELD».
-                        // В Liquid Glass поле дополнительно оборачивается
-                        // LiquidGlassSurface для эффекта стекла (§5.1).
-                        SizedBox(
-                          width: 336,
-                          child: TextField(
+                      // Поле поиска: capsule-форма (radius = capsule),
+                      // длина увеличена на 20% (280 → 336) согласно
+                      // гайдлайну COROBKA_iOS27 §18 «SEARCH FIELD».
+                      // В Liquid Glass поле дополнительно оборачивается
+                      // LiquidGlassSurface для эффекта стекла (§5.1).
+                      SizedBox(
+                        width: 336,
+                        child: TextField(
                           controller: _searchController,
                           textInputAction: TextInputAction.search,
                           decoration: InputDecoration(
@@ -642,7 +642,8 @@ Future<int?> showMoveToFolderPicker(
                                   .textTheme
                                   .bodySmall
                                   ?.copyWith(
-                                    color: Theme.of(context).colorScheme.outline,
+                                    color:
+                                        Theme.of(context).colorScheme.outline,
                                   ),
                             ),
                           )
@@ -655,8 +656,7 @@ Future<int?> showMoveToFolderPicker(
                                   leading:
                                       const Icon(Icons.folder_off_outlined),
                                   title: const Text('Без папки (корень)'),
-                                  onTap: () =>
-                                      Navigator.pop(dialogContext, -1),
+                                  onTap: () => Navigator.pop(dialogContext, -1),
                                 ),
                               for (final folder in folders)
                                 Builder(builder: (context) {
@@ -682,8 +682,8 @@ Future<int?> showMoveToFolderPicker(
                                                 ),
                                           )
                                         : null,
-                                    onTap: () => Navigator.pop(
-                                        dialogContext, folder.id),
+                                    onTap: () =>
+                                        Navigator.pop(dialogContext, folder.id),
                                   );
                                 }),
                             ],
@@ -701,6 +701,12 @@ Future<int?> showMoveToFolderPicker(
 
 /// Перетаскиваемая карточка элемента: тянет одиночный элемент
 /// или всё массовое выделение (если элемент входит в него).
+///
+/// Использует нативный drag-and-drop: файл(ы) можно вытащить
+/// из приложения прямо в Проводник Windows или в любое другое ПО
+/// ([NativeFileDraggable]). Бросание на папки внутри приложения
+/// продолжает работать как перемещение — id выделения передаются
+/// в локальных данных drag-сессии.
 class _ItemDraggable extends StatelessWidget {
   const _ItemDraggable({required this.item, required this.child});
 
@@ -717,81 +723,15 @@ class _ItemDraggable extends StatelessWidget {
     final ids = state.isMultiSelected(item)
         ? state.multiSelectedIds.toList()
         : <int>[item.id];
+    final items = state.itemsByIds(ids);
+    final paths = items.map((e) => e.path).toList();
 
-    return Draggable<List<int>>(
-      data: ids,
-      dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: _DragFeedback(
-        count: ids.length,
-        thumbnailPath: item.isImage ? item.path : null,
-      ),
-      childWhenDragging: Opacity(opacity: 0.4, child: child),
+    if (paths.isEmpty) return child;
+
+    return NativeFileDraggable(
+      paths: paths,
+      ids: ids,
       child: child,
-    );
-  }
-}
-
-/// «Отзыв» при перетаскивании: превью + счётчик выбранных файлов.
-class _DragFeedback extends StatelessWidget {
-  const _DragFeedback({required this.count, this.thumbnailPath});
-
-  final int count;
-  final String? thumbnailPath;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        width: 88,
-        height: 88,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.primary,
-            width: 2,
-          ),
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        ),
-        child: Stack(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox.expand(
-                child: thumbnailPath != null
-                    ? Image.file(
-                        File(thumbnailPath!),
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            const Icon(Icons.image_outlined),
-                      )
-                    : const Icon(Icons.image_outlined),
-              ),
-            ),
-            if (count > 1)
-              Positioned(
-                right: 4,
-                bottom: 4,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '$count',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1048,6 +988,29 @@ class _ItemCard extends StatelessWidget {
             title: Text('Открыть'),
           ),
         ),
+        // Скачать: копирование файла(ов) в системную папку «Загрузки».
+        PopupMenuItem(
+          value: 'download',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.download_outlined),
+            title: Text(actOnSelection
+                ? 'Скачать выбранные ($selectionCount)'
+                : 'Скачать'),
+          ),
+        ),
+        // Открыть папку: Проводник открывает папку с файлом
+        // и выделяет файл в ней.
+        const PopupMenuItem(
+          value: 'reveal',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.folder_open_outlined),
+            title: Text('Открыть папку'),
+          ),
+        ),
         if (!isTrash)
           PopupMenuItem(
             value: 'favorite',
@@ -1123,6 +1086,10 @@ class _ItemCard extends StatelessWidget {
     switch (action) {
       case 'open':
         _openLightbox(context, state);
+      case 'download':
+        await _download(context, state);
+      case 'reveal':
+        await _reveal(context, state);
       case 'favorite':
         await state.toggleFavorite(item);
       case 'move':
@@ -1145,6 +1112,66 @@ class _ItemCard extends StatelessWidget {
       case 'purge':
         await state.purgeItem(item);
     }
+  }
+
+  /// Скачивание файла (или всего массового выделения) в папку
+  /// «Загрузки» на ПК, с показом результата через SnackBar.
+  Future<void> _download(
+    BuildContext context,
+    CollectionState state,
+  ) async {
+    final actOnSelection =
+        state.isMultiSelected(item) && state.multiSelectedIds.length > 1;
+    final targets = actOnSelection
+        ? state.itemsByIds(state.multiSelectedIds.toList())
+        : <CollectionItem>[item];
+
+    final result = await state.downloadItems(targets);
+    if (!context.mounted || result == null) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    if (result.exported > 0 && result.failed == 0) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Скачано в «Загрузки»: ${result.exported} '
+            '${_pluralFiles(result.exported)}',
+          ),
+        ),
+      );
+    } else {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Скачано: ${result.exported}, '
+            'не удалось: ${result.failed}',
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Открытие папки с файлом в Проводнике с выделением файла.
+  Future<void> _reveal(
+    BuildContext context,
+    CollectionState state,
+  ) async {
+    final ok = await state.revealItemInFolder(item);
+    if (!ok || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Папка открыта: ${item.title}')),
+    );
+  }
+
+  /// Правильная форма слова «файл» для количества.
+  static String _pluralFiles(int count) {
+    final mod10 = count % 10;
+    final mod100 = count % 100;
+    if (mod10 == 1 && mod100 != 11) return 'файл';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 > 20)) {
+      return 'файла';
+    }
+    return 'файлов';
   }
 
   /// Диалог перемещения элемента в папку.
@@ -1269,10 +1296,10 @@ class _ItemListRow extends StatelessWidget {
                                 child: Icon(
                                   Icons.play_circle_outline,
                                   size: 22,
-                                  color:
-                                      Colors.white.withValues(alpha: 0.9),
+                                  color: Colors.white.withValues(alpha: 0.9),
                                   shadows: const [
-                                    Shadow(blurRadius: 6, color: Colors.black54),
+                                    Shadow(
+                                        blurRadius: 6, color: Colors.black54),
                                   ],
                                 ),
                               ),

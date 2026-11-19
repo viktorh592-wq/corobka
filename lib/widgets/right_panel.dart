@@ -27,9 +27,7 @@ class RightPanel extends StatelessWidget {
 
     return FrostedPanel(
       color: colors.panel,
-      child: item == null
-          ? const _EmptyDetails()
-          : _ItemDetails(item: item),
+      child: item == null ? const _EmptyDetails() : _ItemDetails(item: item),
     );
   }
 }
@@ -238,8 +236,7 @@ class _TitleEditorState extends State<_TitleEditor> {
     if (idChanged) {
       _controller.text = widget.item.title;
       _lastItemId = widget.item.id;
-    } else if (!_focusNode.hasFocus &&
-        _controller.text != widget.item.title) {
+    } else if (!_focusNode.hasFocus && _controller.text != widget.item.title) {
       _controller.text = widget.item.title;
     }
   }
@@ -277,7 +274,8 @@ class _TitleEditorState extends State<_TitleEditor> {
         ),
         const SizedBox(width: 4),
         IconButton(
-          tooltip: widget.item.isFavorite ? 'Убрать из избранного' : 'В избранное',
+          tooltip:
+              widget.item.isFavorite ? 'Убрать из избранного' : 'В избранное',
           icon: Icon(
             widget.item.isFavorite ? Icons.star : Icons.star_border,
             color: widget.item.isFavorite ? Colors.amber : null,
@@ -309,6 +307,33 @@ class _MetadataBlock extends StatelessWidget {
         if (item.isAudio && item.bpm != null)
           _MetaRow(label: 'BPM', value: '${item.bpm}'),
         if (item.palette != null) _PaletteBlock(paletteJson: item.palette!),
+        // Передача файла на ПК: скачать в «Загрузки» и открыть
+        // папку с выделением файла в Проводнике.
+        const SizedBox(height: 10),
+        // Wrap (а не Row): в узкой панели кнопки переносятся на новую строку.
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            Tooltip(
+              message: 'Скачать файл в папку «Загрузки» на ПК',
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.download_outlined, size: 18),
+                label: const Text('Скачать'),
+                onPressed: () => _download(context),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Открыть папку с файлом и выделить файл',
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.folder_open_outlined, size: 18),
+                label: const Text('Открыть папку'),
+                onPressed: () => _reveal(context),
+              ),
+            ),
+          ],
+        ),
         if (item.isVideo || item.isAudio) ...[
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -325,6 +350,28 @@ class _MetadataBlock extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  /// Скачивание файла в системную папку «Загрузки» с уведомлением.
+  Future<void> _download(BuildContext context) async {
+    final state = context.read<CollectionState>();
+    final result = await state.downloadItems([item]);
+    if (!context.mounted || result == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.failed == 0
+              ? 'Скачано в «Загрузки»: ${result.exported}'
+              : 'Скачано: ${result.exported}, не удалось: ${result.failed}',
+        ),
+      ),
+    );
+  }
+
+  /// Открытие папки с файлом (Проводник выделяет файл).
+  Future<void> _reveal(BuildContext context) async {
+    final state = context.read<CollectionState>();
+    await state.revealItemInFolder(item);
   }
 }
 
@@ -501,13 +548,14 @@ class _PaletteBlockState extends State<_PaletteBlock> {
   }
 
   List<Color> _parseColors(String json) {
-    final list = (json.replaceAll('[', '').replaceAll(']', '').replaceAll('"', ''))
-        .split(',')
-        .where((s) => s.trim().isNotEmpty)
-        .map((s) => int.tryParse(s.trim(), radix: 16))
-        .whereType<int>()
-        .map((v) => Color(0xFF000000 | v))
-        .toList();
+    final list =
+        (json.replaceAll('[', '').replaceAll(']', '').replaceAll('"', ''))
+            .split(',')
+            .where((s) => s.trim().isNotEmpty)
+            .map((s) => int.tryParse(s.trim(), radix: 16))
+            .whereType<int>()
+            .map((v) => Color(0xFF000000 | v))
+            .toList();
     return list;
   }
 }

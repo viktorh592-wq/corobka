@@ -1,0 +1,526 @@
+{
+  "document": {
+    "title": "Dark Neumorphic Smart Home Dashboard — Design Specification",
+    "version": "1.0",
+    "source_image": {
+      "filename": "image(20261119-112116).png",
+      "dimensions_px": {
+        "width": 495,
+        "height": 830
+      },
+      "notes": "Approximate visual measurements and colors. Recreate responsively; do not treat screenshot coordinates as fixed production dimensions."
+    },
+    "purpose": "Visual, component and interaction specification for recreating the supplied dashboard."
+  },
+  "design_system": {
+    "style_name": "Dark Soft-Neumorphism / Ambient Smart Home UI",
+    "visual_character": [
+      "Premium dark smart-home dashboard",
+      "Soft raised and recessed neumorphic surfaces",
+      "Large rounded cards and circular wells",
+      "Violet illumination for active controls",
+      "Cyan/turquoise environmental and security indicators",
+      "Low-contrast surfaces with luminous accents"
+    ],
+    "color_palette": {
+      "page_background": "#10141F",
+      "surface_base": "#202633",
+      "surface_highlight": "#2B3444",
+      "surface_shadow": "#0B0F18",
+      "surface_recessed": "#171D29",
+      "text_primary": "#F1F3FA",
+      "text_secondary": "#A2AABC",
+      "text_muted": "#727D91",
+      "accent_violet": "#A77BFF",
+      "accent_violet_light": "#D2B8FF",
+      "accent_violet_dark": "#6845C7",
+      "accent_cyan": "#43D5F4",
+      "accent_cyan_soft": "#64D9E8",
+      "accent_green": "#3ED6C1",
+      "inactive_control": "#394253",
+      "track_dark": "#111722"
+    },
+    "typography": {
+      "font_family": "Inter, SF Pro Display, or similar modern geometric sans-serif",
+      "primary": {
+        "weight": 500,
+        "color": "#F1F3FA"
+      },
+      "secondary": {
+        "weight": 400,
+        "color": "#A2AABC"
+      },
+      "temperature": {
+        "weight": 600,
+        "approx_size_px": 44
+      },
+      "card_title": {
+        "weight": 500,
+        "approx_size_px": 16
+      },
+      "supporting_text": {
+        "weight": 400,
+        "approx_size_px": 13
+      },
+      "status_text": {
+        "weight": 500,
+        "approx_size_px": 13
+      }
+    },
+    "shape_language": {
+      "hero_radius_px": 34,
+      "card_radius_px": 29,
+      "control_radius": "Pill or circle",
+      "icon_well_radius": "50%",
+      "toggle_radius": "999px",
+      "rule": "Prefer large continuous corner radii; avoid sharp edges and hard outlines."
+    },
+    "surface_treatment": {
+      "card_fill": "Subtle gradient from a slightly lighter upper-left to darker lower-right.",
+      "raised": "Broad soft upper-left highlight plus deeper lower-right shadow.",
+      "recessed": "Dark inset well with faint inner upper-left highlight and lower-right inner shadow.",
+      "borders": "Usually none; if needed use a very low-opacity cool-grey border.",
+      "avoid": [
+        "Bright white borders",
+        "Pure-black flat cards",
+        "Hard drop shadows",
+        "Excessive glass blur",
+        "Large high-saturation gradients"
+      ]
+    },
+    "lighting": {
+      "violet_glow": "Diffuse violet bloom around active toggles, slider thumbs, lamp icon and thermostat arc.",
+      "cyan_glow": "Soft cyan bloom around air-conditioner and shield icons and small status dots.",
+      "ambient_shadow": "Large blurred dark shadow beneath cards to lift them from the page.",
+      "edge_highlight": "Very subtle pale blue-grey highlight on upper-left edges.",
+      "intensity": "Glow should be visible but diffuse; reserve the strongest illumination for the thermostat arc."
+    }
+  },
+  "layout": {
+    "reference_canvas_px": {
+      "width": 495,
+      "height": 830
+    },
+    "page": {
+      "background": "#10141F",
+      "outer_padding_px_estimate": 10,
+      "vertical_scroll": true,
+      "columns": 2,
+      "column_gap_px_estimate": 16,
+      "row_gap_px_estimate": 22
+    },
+    "regions": [
+      {
+        "id": "temperature_hero",
+        "type": "full_width_panel",
+        "approx_bounds_px": {
+          "x": 0,
+          "y": 0,
+          "width": 495,
+          "height": 328
+        },
+        "description": "Full-width rounded hero. Large circular thermostat in upper-middle; indoor temperature and air-quality labels to the left; quick-action circles at the edges; room selector and cooling status centered at bottom."
+      },
+      {
+        "id": "smart_lights_card",
+        "type": "device_card",
+        "approx_bounds_px": {
+          "x": 0,
+          "y": 350,
+          "width": 226,
+          "height": 202
+        },
+        "grid_position": "row_1_column_1"
+      },
+      {
+        "id": "air_conditioner_card",
+        "type": "device_card",
+        "approx_bounds_px": {
+          "x": 248,
+          "y": 350,
+          "width": 237,
+          "height": 202
+        },
+        "grid_position": "row_1_column_2"
+      },
+      {
+        "id": "music_system_card",
+        "type": "device_card",
+        "approx_bounds_px": {
+          "x": 0,
+          "y": 576,
+          "width": 226,
+          "height": 220
+        },
+        "grid_position": "row_2_column_1"
+      },
+      {
+        "id": "security_card",
+        "type": "device_card",
+        "approx_bounds_px": {
+          "x": 248,
+          "y": 576,
+          "width": 237,
+          "height": 220
+        },
+        "grid_position": "row_2_column_2"
+      }
+    ],
+    "responsive_behavior": {
+      "narrow": "Use two columns only while cards remain readable; otherwise stack cards in one column. Keep the hero first.",
+      "wide": "Constrain and center the dashboard; increase spacing proportionally instead of stretching controls.",
+      "safe_area": "Respect device safe areas and allow vertical scrolling."
+    }
+  },
+  "components": [
+    {
+      "id": "hero_temperature_dial",
+      "name": "Circular thermostat",
+      "location": "temperature_hero",
+      "visual": {
+        "shape": "Large concentric circular control",
+        "layers": [
+          "Outer dark recessed well",
+          "Fine radial tick marks",
+          "Muted circular guide ring",
+          "Inner circular face with subtle violet rim",
+          "Partial violet arc around upper-right/right circumference",
+          "Bright circular thumb at arc endpoint"
+        ],
+        "center": [
+          "Large white 22°C value",
+          "Small cyan leaf/eco icon"
+        ],
+        "arc": {
+          "color": "#A77BFF",
+          "highlight": "#D2B8FF",
+          "thickness_px_estimate": "4–6",
+          "ends": "Rounded",
+          "glow": "Soft violet bloom",
+          "sweep": "Approximately 10 o'clock through 5 o'clock"
+        },
+        "ticks": "Numerous fine low-contrast radial marks; selected major divisions slightly longer."
+      },
+      "displayed_state": {
+        "temperature_celsius": 22,
+        "eco_indicator": true
+      },
+      "interaction": {
+        "drag": "Drag thumb around the permitted arc to change target temperature.",
+        "tap": "Tap arc to move thumb to nearest position.",
+        "feedback": "Update numeric value and animate arc smoothly.",
+        "accessibility": "Expose a numeric temperature control and announce its value."
+      },
+      "motion": {
+        "arc_and_thumb": "180–280 ms ease-out for discrete changes; direct tracking while dragging.",
+        "glow": "Static or very subtle breathing pulse."
+      }
+    },
+    {
+      "id": "hero_side_labels",
+      "name": "Indoor temperature and air quality",
+      "location": "temperature_hero_left",
+      "visual": {
+        "temperature_label": "Small muted two-line label: Indoor Temperature.",
+        "air_quality": "Cyan leaf icon plus Good Air Quality on two lines.",
+        "alignment": "Left aligned, vertically separated."
+      },
+      "displayed_state": {
+        "air_quality": "Good"
+      },
+      "interaction": "Informational; may open environmental details."
+    },
+    {
+      "id": "hero_quick_actions",
+      "name": "Thermostat quick actions",
+      "location": "hero_edges",
+      "items": [
+        {
+          "id": "cooling_preset",
+          "icon": "snowflake",
+          "position": "upper_left",
+          "visual": "Raised dark circular button with pale icon."
+        },
+        {
+          "id": "temperature_increase",
+          "icon": "plus",
+          "position": "right_top",
+          "visual": "Raised dark circular button."
+        },
+        {
+          "id": "temperature_decrease",
+          "icon": "minus",
+          "position": "right_middle",
+          "visual": "Raised dark circular button."
+        },
+        {
+          "id": "fan_control",
+          "icon": "fan",
+          "position": "right_bottom",
+          "visual": "Raised dark circular button."
+        }
+      ],
+      "interaction": {
+        "snowflake": "Activate/select cooling preset.",
+        "plus": "Increase target temperature by one configured step.",
+        "minus": "Decrease target temperature by one configured step.",
+        "fan": "Open or cycle fan settings."
+      }
+    },
+    {
+      "id": "room_selector",
+      "name": "Room selector",
+      "location": "temperature_hero_bottom_center",
+      "visual": {
+        "text": "Living Room",
+        "icon": "down-chevron",
+        "alignment": "Centered horizontal row",
+        "color": "#F1F3FA"
+      },
+      "interaction": "Open room menu; changing room updates thermostat and device states."
+    },
+    {
+      "id": "cooling_status",
+      "name": "Cooling active status",
+      "location": "below_room_selector",
+      "visual": {
+        "dot_color": "#43D5F4",
+        "text": "Cooling Active",
+        "text_color": "#43D5F4",
+        "alignment": "Centered"
+      },
+      "interaction": "Status indicator; optionally opens HVAC details."
+    },
+    {
+      "id": "smart_lights_card",
+      "name": "Smart Lights",
+      "visual": {
+        "container": "Raised rounded dark card.",
+        "icon": "Pendant lamp inside circular dark icon well with violet glow.",
+        "toggle": "Pill toggle, ON; violet thumb at right.",
+        "title": "Smart Lights",
+        "subtitle": "3 of 5 On",
+        "slider": "Sun icon, violet filled track, dark remainder, circular violet thumb, 70% value."
+      },
+      "displayed_state": {
+        "enabled": true,
+        "on_count": 3,
+        "total_count": 5,
+        "brightness_percent": 70
+      },
+      "interaction": {
+        "toggle": "Enable or disable the light group.",
+        "slider": "Set brightness from 0–100%.",
+        "icon": "Open detailed lighting or scene controls."
+      },
+      "motion": {
+        "toggle": "Short slide-and-tint transition.",
+        "slider": "Thumb tracks pointer/finger; fill animates.",
+        "lamp_glow": "Fade glow in when enabled and down when disabled."
+      }
+    },
+    {
+      "id": "air_conditioner_card",
+      "name": "Air Conditioner",
+      "visual": {
+        "container": "Raised rounded dark card.",
+        "icon": "Cyan AC line icon in circular dark well with cyan ambient glow.",
+        "toggle": "Pill toggle, ON, violet thumb at right.",
+        "title": "Air Conditioner",
+        "subtitle": "Cooling • 22°C",
+        "mode_selector": {
+          "options": [
+            "Auto",
+            "Cool",
+            "Heat"
+          ],
+          "leading_icon": "snowflake",
+          "selected": "Auto",
+          "selected_style": "Violet filled pill"
+        }
+      },
+      "displayed_state": {
+        "enabled": true,
+        "mode": "Auto",
+        "operation_label": "Cooling",
+        "temperature_celsius": 22
+      },
+      "interaction": {
+        "toggle": "Switch AC on/off.",
+        "mode_selector": "Select Auto, Cool or Heat.",
+        "icon": "Open climate settings."
+      },
+      "motion": {
+        "toggle": "Short slide-and-tint transition.",
+        "mode_selector": "Move/fade selected pill in 150–220 ms.",
+        "icon_glow": "Steady cyan glow while active."
+      }
+    },
+    {
+      "id": "music_system_card",
+      "name": "Music System",
+      "visual": {
+        "container": "Raised rounded dark card.",
+        "icon": "Music-note icon in circular dark well with violet glow.",
+        "toggle": "Pill toggle, ON, violet thumb at right.",
+        "title": "Music System",
+        "subtitle": "Playing • Chill Mix",
+        "slider": "Speaker icon, violet filled track, dark remainder, circular violet thumb, 60% value."
+      },
+      "displayed_state": {
+        "enabled": true,
+        "playback": "Playing",
+        "playlist": "Chill Mix",
+        "volume_percent": 60
+      },
+      "interaction": {
+        "toggle": "Enable/disable system or start/pause playback according to product logic.",
+        "slider": "Set volume from 0–100%.",
+        "icon": "Open player or output selection."
+      },
+      "motion": {
+        "toggle": "Short slide-and-tint transition.",
+        "slider": "Smooth thumb and fill update.",
+        "icon_glow": "Optional gentle violet pulse while playing."
+      }
+    },
+    {
+      "id": "security_card",
+      "name": "Security",
+      "visual": {
+        "container": "Raised rounded dark card.",
+        "icon": "Cyan shield outline in circular dark well with cyan glow.",
+        "navigation": "Circular raised button with right chevron.",
+        "title": "Security",
+        "status": "Turquoise dot plus All Secure",
+        "quick_actions": [
+          {
+            "id": "cameras",
+            "icon": "video-camera",
+            "label": "Cameras"
+          },
+          {
+            "id": "door_lock",
+            "icon": "lock",
+            "label": "Door Lock"
+          },
+          {
+            "id": "motion",
+            "icon": "running-person",
+            "label": "Motion"
+          }
+        ]
+      },
+      "displayed_state": {
+        "security_status": "All Secure"
+      },
+      "interaction": {
+        "chevron": "Open security dashboard.",
+        "cameras": "Open camera feeds/list.",
+        "door_lock": "Open lock status and permitted controls.",
+        "motion": "Open sensor status and event history."
+      },
+      "motion": {
+        "quick_action_press": "Brief scale-down or brightness feedback.",
+        "status": "Steady cyan dot when secure; use a distinct warning state for alerts."
+      },
+      "safety": "For real security controls, distinguish locked, unlocked, unknown and offline states; never rely on color alone."
+    },
+    {
+      "id": "floating_expand_button",
+      "name": "Floating expand affordance",
+      "location": "bottom_right_overlay",
+      "visual": {
+        "shape": "Small translucent light-grey rounded control",
+        "icon": "Diagonal expand arrows"
+      },
+      "interaction": "Expand dashboard or enter fullscreen if supported.",
+      "note": "May be a viewer/screenshot overlay rather than part of the dashboard itself; include only if it belongs to the target product."
+    }
+  ],
+  "reusable_tokens": {
+    "spacing_px_estimates": {
+      "card_inner_padding": 14,
+      "column_gap": 16,
+      "row_gap": 22,
+      "icon_to_title_gap": 10,
+      "title_to_subtitle_gap": 3
+    },
+    "control_sizes_px_estimates": {
+      "thermostat_diameter": 220,
+      "icon_well_diameter": 58,
+      "toggle_width": 57,
+      "toggle_height": 31,
+      "slider_track_height": 5,
+      "slider_thumb_diameter": 15,
+      "quick_action_diameter": 58
+    },
+    "shadow_recipes": {
+      "raised_card": "0 12px 28px rgba(0,0,0,0.34), -5px -5px 14px rgba(66,78,101,0.10)",
+      "raised_button": "5px 5px 12px rgba(0,0,0,0.42), -4px -4px 10px rgba(91,105,132,0.12)",
+      "inset_well": "inset 4px 4px 9px rgba(0,0,0,0.42), inset -3px -3px 8px rgba(93,107,135,0.08)",
+      "violet_glow": "0 0 8px rgba(167,123,255,0.55), 0 0 20px rgba(137,91,255,0.22)",
+      "cyan_glow": "0 0 8px rgba(67,213,244,0.42), 0 0 18px rgba(67,213,244,0.18)"
+    },
+    "animation_timing_ms": {
+      "micro_interaction": 120,
+      "toggle": 180,
+      "segmented_control": 180,
+      "slider_value": 120,
+      "thermostat": 240,
+      "card_press": 100
+    },
+    "easing": {
+      "standard": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+      "spring_like": "cubic-bezier(0.22, 1, 0.36, 1)"
+    }
+  },
+  "implementation_guidelines": {
+    "suggested_components": [
+      "DashboardPage",
+      "TemperatureHero",
+      "CircularThermostat",
+      "RoomSelector",
+      "StatusIndicator",
+      "DeviceCard",
+      "NeumorphicIconButton",
+      "NeumorphicToggle",
+      "AccentSlider",
+      "SegmentedModeSelector",
+      "SecurityQuickAction"
+    ],
+    "suggested_state": {
+      "selectedRoom": "Living Room",
+      "targetTemperatureC": 22,
+      "hvacMode": "Auto",
+      "hvacEnabled": true,
+      "lightsEnabled": true,
+      "lightsOnCount": 3,
+      "lightsTotalCount": 5,
+      "brightnessPercent": 70,
+      "musicEnabled": true,
+      "musicPlayback": "Playing",
+      "musicPlaylist": "Chill Mix",
+      "volumePercent": 60,
+      "securityStatus": "All Secure"
+    },
+    "accessibility": [
+      "Use semantic buttons, switches and sliders rather than decorative controls.",
+      "Provide accessible labels for icon-only buttons.",
+      "Expose toggle state and slider values to assistive technology.",
+      "Maintain readable contrast for secondary labels.",
+      "Do not communicate active, warning or error states by color alone.",
+      "Support reduced-motion preferences and visible keyboard focus."
+    ],
+    "quality_checklist": [
+      "Cards have soft depth without hard borders.",
+      "Thermostat remains the dominant visual element.",
+      "Violet is mainly for active controls and adjustable values.",
+      "Cyan is mainly for environmental, climate and security indicators.",
+      "Labels are compact and consistently aligned.",
+      "Sliders and toggles clearly show current state.",
+      "Lower cards remain reachable by scrolling.",
+      "Layout remains legible on narrower and wider screens."
+    ]
+  }
+}
