@@ -700,7 +700,7 @@ class AppTheme {
         labelStyle: TextStyle(color: textSecondary, fontSize: 13),
         selectedColor: _neuVioletBright,
         checkmarkColor: _neuOnAccent,
-        secondaryLabelStyle: TextStyle(color: _neuOnAccent, fontSize: 13),
+        secondaryLabelStyle: const TextStyle(color: _neuOnAccent, fontSize: 13),
       ),
       // Переключатели (Switch) — неоновая дорожка #A17BFC в активном
       // состоянии, recessed-дорожка с серым ползунком в неактивном.
